@@ -8,14 +8,24 @@ class MenuBarController: NSObject {
     private var allLines: [LyricLine] = []
     private var currentIndex: Int = -1
 
+    private static let fallbackIcon = "♪ yalyric"
+
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric")
-            button.target = self
-            button.action = #selector(togglePopover)
+            Self.applyIcon(to: button)
+        }
+    }
+
+    private static func applyIcon(to button: NSStatusBarButton) {
+        if let image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric") {
+            button.image = image
+            button.title = ""
+        } else {
+            button.image = nil
+            button.title = fallbackIcon
         }
     }
 
@@ -63,15 +73,14 @@ class MenuBarController: NSObject {
     }
 
     func updateCurrentLine(_ text: String) {
-        if let button = statusItem.button {
+        guard let button = statusItem.button else { return }
+
+        if text.isEmpty {
+            Self.applyIcon(to: button)
+        } else {
+            button.image = nil
             let truncated = text.count > 40 ? String(text.prefix(37)) + "..." : text
-            if truncated.isEmpty {
-                button.title = ""
-                button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric")
-            } else {
-                button.image = nil
-                button.title = truncated
-            }
+            button.title = truncated
         }
     }
 
