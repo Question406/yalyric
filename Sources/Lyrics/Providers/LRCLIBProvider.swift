@@ -23,7 +23,7 @@ public struct LRCLIBProvider: LyricsProvider {
 
         guard let url = components.url else { return nil }
         var request = URLRequest(url: url)
-        request.setValue("LyricSync/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -40,7 +40,7 @@ public struct LRCLIBProvider: LyricsProvider {
 
         guard let url = components.url else { return nil }
         var request = URLRequest(url: url)
-        request.setValue("LyricSync/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

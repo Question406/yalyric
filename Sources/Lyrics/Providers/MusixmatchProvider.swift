@@ -24,7 +24,7 @@ public struct MusixmatchProvider: LyricsProvider {
 
         guard let url = components.url else { return nil }
         var request = URLRequest(url: url)
-        request.setValue("LyricSync/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -44,7 +44,7 @@ public struct MusixmatchProvider: LyricsProvider {
         guard let url = URL(string: "https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0") else { return nil }
 
         var request = URLRequest(url: url)
-        request.setValue("LyricSync/1.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

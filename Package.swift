@@ -2,22 +2,22 @@
 import PackageDescription
 
 let package = Package(
-    name: "LyricSync",
+    name: "yalyric",
     platforms: [.macOS(.v13)],
     targets: [
         .target(
-            name: "LyricSyncLib",
+            name: "yalyricLib",
             path: "Sources",
             exclude: ["App/main.swift"]
         ),
         .executableTarget(
-            name: "LyricSync",
-            dependencies: ["LyricSyncLib"],
+            name: "yalyric",
+            dependencies: ["yalyricLib"],
             path: "Executable"
         ),
         .testTarget(
-            name: "LyricSyncTests",
-            dependencies: ["LyricSyncLib"],
+            name: "yalyricTests",
+            dependencies: ["yalyricLib"],
             path: "Tests"
         )
     ]

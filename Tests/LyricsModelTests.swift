@@ -1,5 +1,5 @@
 import Testing
-@testable import LyricSyncLib
+@testable import yalyricLib
 
 @Suite("Lyrics Model — Binary Search")
 struct LyricsModelTests {

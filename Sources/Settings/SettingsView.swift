@@ -47,7 +47,7 @@ class SettingsWindowController: NSWindowController {
             backing: .buffered,
             defer: false
         )
-        window.title = "LyricSync Settings"
+        window.title = "yalyric Settings"
         window.center()
 
         self.init(window: window)

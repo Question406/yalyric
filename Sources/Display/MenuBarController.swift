@@ -13,7 +13,7 @@ class MenuBarController: NSObject {
         super.init()
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "LyricSync")
+            button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric")
             button.target = self
             button.action = #selector(togglePopover)
         }
@@ -67,7 +67,7 @@ class MenuBarController: NSObject {
             let truncated = text.count > 40 ? String(text.prefix(37)) + "..." : text
             if truncated.isEmpty {
                 button.title = ""
-                button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "LyricSync")
+                button.image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric")
             } else {
                 button.image = nil
                 button.title = truncated

@@ -37,7 +37,7 @@ class SidebarPanel: NSWindow {
         effectView.state = .active
 
         // Title bar area
-        let titleLabel = NSTextField(labelWithString: "LyricSync")
+        let titleLabel = NSTextField(labelWithString: "yalyric")
         titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
         titleLabel.textColor = .secondaryLabelColor
         titleLabel.translatesAutoresizingMaskIntoConstraints = false

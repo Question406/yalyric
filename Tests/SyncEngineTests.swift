@@ -1,5 +1,5 @@
 import Testing
-@testable import LyricSyncLib
+@testable import yalyricLib
 
 @Suite("SyncEngine")
 @MainActor

@@ -1,5 +1,5 @@
 import AppKit
-import LyricSyncLib
+import yalyricLib
 
 let app = NSApplication.shared
 let delegate = MainActor.assumeIsolated { AppDelegate() }
