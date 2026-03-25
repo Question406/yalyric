@@ -16,14 +16,13 @@ yalyric fills the gap with a fresh native app, modern lyrics APIs, and support f
 
 ## Features
 
-### Four Display Modes
+### Three Display Modes
 
 | Mode | Description |
 |---|---|
 | **Floating Overlay** | Always-on-top transparent window with current + next line. Click-through — doesn't interfere with your work. |
 | **Desktop Widget** | Sits on the wallpaper layer showing 5 lines with the current line highlighted. Blurred background card. |
 | **Menu Bar** | Shows the current lyric in the menu bar. Click to open a popover with full scrolling lyrics. |
-| **Sidebar Panel** | 300px panel docked to the right edge with all lyrics, auto-scrolling to the current line. |
 
 All modes can be enabled/disabled independently from Settings.
 
@@ -84,7 +83,7 @@ Click the menu bar icon to access **Settings**.
 
 ### Display Modes
 
-Toggle any combination of the four display modes. Default: Floating Overlay + Menu Bar.
+Toggle any combination of the three display modes. Default: Floating Overlay + Menu Bar.
 
 ### Spotify Internal Lyrics (Optional)
 
@@ -128,8 +127,7 @@ yalyric/
 │   ├── Display/
 │   │   ├── OverlayWindow.swift        # Floating transparent overlay
 │   │   ├── DesktopWidget.swift        # Wallpaper-layer widget
-│   │   ├── MenuBarController.swift    # Menu bar + popover
-│   │   └── SidebarPanel.swift         # Docked sidebar panel
+│   │   └── MenuBarController.swift    # Menu bar + popover
 │   ├── Settings/
 │   │   └── SettingsView.swift         # Preferences window
 │   └── Models/
@@ -161,7 +159,7 @@ If you have Xcode installed, `swift test` works without the extra flags.
 
 3. **SyncEngine** uses binary search on the sorted lyric timestamps to find the current line for the given playback position. It publishes the current line, next line, line index, and intra-line progress.
 
-4. **Display modes** subscribe to the sync engine and update their views — the overlay crossfades text, the sidebar auto-scrolls, etc.
+4. **Display modes** subscribe to the sync engine and update their views — the overlay crossfades text, the widget highlights the current line, etc.
 
 ## Disclaimer
 

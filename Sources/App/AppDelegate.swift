@@ -10,7 +10,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayWindow: OverlayWindow?
     private var desktopWidget: DesktopWidget?
     private var menuBarController: MenuBarController?
-    private var sidebarPanel: SidebarPanel?
 
     private var settingsWindowController: SettingsWindowController?
     private var cancellables = Set<AnyCancellable>()
@@ -55,13 +54,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             desktopWidget = nil
         }
 
-        if modes.contains(.sidebar) {
-            if sidebarPanel == nil { sidebarPanel = SidebarPanel() }
-            sidebarPanel?.orderFront(nil)
-        } else {
-            sidebarPanel?.orderOut(nil)
-            sidebarPanel = nil
-        }
+
     }
 
     private func setupMenuBarMenu() {
@@ -149,9 +142,6 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarController?.updateCurrentLine(currentLine)
         }
         menuBarController?.updateLyrics(lines: lines, currentIndex: index)
-
-        // Sidebar
-        sidebarPanel?.updateLyrics(lines: lines, currentIndex: index)
 
         // Handle no track / no lyrics states
         if spotifyBridge.currentTrack == nil {

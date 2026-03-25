@@ -4,7 +4,6 @@ enum DisplayMode: String, CaseIterable {
     case overlay = "Floating Overlay"
     case desktop = "Desktop Widget"
     case menuBar = "Menu Bar"
-    case sidebar = "Sidebar Panel"
 }
 
 class SettingsManager: ObservableObject {
