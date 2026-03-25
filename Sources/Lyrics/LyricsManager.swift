@@ -15,14 +15,18 @@ public class LyricsManager: ObservableObject {
     ]
     private var cache: [String: Lyrics] = [:]
     private var currentFetchTask: Task<Void, Never>?
+    private var currentTrackID: String?
 
     func addProvider(_ provider: LyricsProvider) {
         providers.append(provider)
     }
 
     func fetchLyrics(for track: TrackInfo) {
+        let trackID = track.id
+        currentTrackID = trackID
+
         // Check cache
-        if let cached = cache[track.id] {
+        if let cached = cache[trackID] {
             currentLyrics = cached
             errorMessage = nil
             return
@@ -41,11 +45,9 @@ public class LyricsManager: ObservableObject {
                 do {
                     if let lyrics = try await provider.fetch(track: track) {
                         if lyrics.isSynced {
-                            // Synced lyrics found — use immediately
                             bestLyrics = lyrics
                             break
                         } else if bestLyrics == nil {
-                            // Keep plain lyrics as fallback
                             bestLyrics = lyrics
                         }
                     }
@@ -56,8 +58,11 @@ public class LyricsManager: ObservableObject {
 
             if Task.isCancelled { return }
 
+            // Verify track hasn't changed during fetch
+            guard currentTrackID == trackID else { return }
+
             if let lyrics = bestLyrics {
-                cache[track.id] = lyrics
+                cache[trackID] = lyrics
                 currentLyrics = lyrics
                 errorMessage = nil
             } else {

@@ -22,8 +22,7 @@ public struct LRCLIBProvider: LyricsProvider {
         ]
 
         guard let url = components.url else { return nil }
-        var request = URLRequest(url: url)
-        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
+        var request = providerRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -39,17 +38,34 @@ public struct LRCLIBProvider: LyricsProvider {
         ]
 
         guard let url = components.url else { return nil }
-        var request = URLRequest(url: url)
-        request.setValue("yalyric/1.0", forHTTPHeaderField: "User-Agent")
+        var request = providerRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
-        guard let results = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              let first = results.first else { return nil }
+        guard let results = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
 
-        let resultData = try JSONSerialization.data(withJSONObject: first)
+        // Find best match by duration (within 5s tolerance)
+        let targetDuration = track.duration
+        let bestResult = results
+            .filter { result in
+                guard let duration = result["duration"] as? Double else { return false }
+                return abs(duration - targetDuration) < 5.0
+            }
+            .first { result in
+                // Prefer results that have synced lyrics
+                if let synced = result["syncedLyrics"] as? String, !synced.isEmpty { return true }
+                return false
+            }
+            ?? results.first(where: { result in
+                guard let duration = result["duration"] as? Double else { return false }
+                return abs(duration - targetDuration) < 5.0
+            })
+
+        guard let match = bestResult else { return nil }
+
+        let resultData = try JSONSerialization.data(withJSONObject: match)
         return try parseLRCLIBResponse(resultData)
     }
 

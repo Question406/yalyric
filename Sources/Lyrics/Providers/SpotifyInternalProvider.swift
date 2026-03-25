@@ -14,7 +14,7 @@ public struct SpotifyInternalProvider: LyricsProvider {
         let trackID = track.spotifyID
         guard let url = URL(string: "https://spclient.wg.spotify.com/color-lyrics/v2/track/\(trackID)?format=json&market=from_token") else { return nil }
 
-        var request = URLRequest(url: url)
+        var request = providerRequest(url: url)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("WebPlayer", forHTTPHeaderField: "App-Platform")
 
@@ -28,7 +28,7 @@ public struct SpotifyInternalProvider: LyricsProvider {
     private func getAccessToken(spDC: String) async throws -> String? {
         guard let url = URL(string: "https://open.spotify.com/get_access_token?reason=transport&productType=web_player") else { return nil }
 
-        var request = URLRequest(url: url)
+        var request = providerRequest(url: url)
         request.setValue("sp_dc=\(spDC)", forHTTPHeaderField: "Cookie")
 
         let (data, response) = try await URLSession.shared.data(for: request)

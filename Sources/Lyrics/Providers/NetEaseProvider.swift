@@ -17,11 +17,10 @@ public struct NetEaseProvider: LyricsProvider {
         let query = "\(track.name) \(track.artist)"
         let bodyString = "s=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&type=1&limit=5&offset=0"
 
-        var request = URLRequest(url: url)
+        var request = providerRequest(url: url, userAgent: "Mozilla/5.0")
         request.httpMethod = "POST"
         request.httpBody = bodyString.data(using: .utf8)
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
         request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -46,18 +45,17 @@ public struct NetEaseProvider: LyricsProvider {
             }
         }
 
-        // Only accept if duration difference is within 3 seconds
-        if let match = bestMatch, match.diff < 3000 {
+        // Only accept if duration difference is within 5 seconds
+        if let match = bestMatch, match.diff < 5000 {
             return match.id
         }
-        return bestMatch?.id
+        return nil
     }
 
     private func fetchLyrics(songID: Int) async throws -> Lyrics? {
         guard let url = URL(string: "https://music.163.com/api/song/lyric?id=\(songID)&lv=1") else { return nil }
 
-        var request = URLRequest(url: url)
-        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        var request = providerRequest(url: url, userAgent: "Mozilla/5.0")
         request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
 
         let (data, response) = try await URLSession.shared.data(for: request)
