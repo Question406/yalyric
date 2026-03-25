@@ -85,18 +85,23 @@ class OverlayWindow: NSWindow {
     }
 
     func updateLyrics(current: String, next: String) {
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.2
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            lyricLabel.animator().alphaValue = 0
-        } completionHandler: { [weak self] in
-            self?.lyricLabel.stringValue = current
+        // Only animate when the current line actually changes
+        if lyricLabel.stringValue != current {
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                self?.lyricLabel.animator().alphaValue = 1
+                context.duration = 0.15
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                lyricLabel.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                self?.lyricLabel.stringValue = current
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.15
+                    self?.lyricLabel.animator().alphaValue = 1
+                }
             }
         }
-        nextLyricLabel.stringValue = next
+        if nextLyricLabel.stringValue != next {
+            nextLyricLabel.stringValue = next
+        }
     }
 
     /// Enable dragging by holding Option key
