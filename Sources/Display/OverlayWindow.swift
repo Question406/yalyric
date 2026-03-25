@@ -195,6 +195,11 @@ class OverlayWindow: NSWindow {
         }
     }
 
+    /// Show track metadata during intro (before first lyric line)
+    func showTrackInfo(title: String, artist: String) {
+        updateLyrics(current: title, next: artist)
+    }
+
     func setDraggable(_ draggable: Bool) {
         ignoresMouseEvents = !draggable
     }

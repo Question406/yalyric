@@ -130,25 +130,56 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let nextLine = syncEngine.nextLine
         let index = syncEngine.currentLineIndex
         let lines = syncEngine.allLines
+        let track = spotifyBridge.currentTrack
 
-        // Overlay
+        if track == nil {
+            // No track playing
+            overlayWindow?.updateLyrics(current: "", next: "")
+            menuBarController?.updateCurrentLine("")
+            return
+        }
+
+        if lyricsManager.isFetching {
+            // Still loading lyrics — show track info
+            overlayWindow?.showTrackInfo(
+                title: track!.name,
+                artist: track!.artist
+            )
+            menuBarController?.updateCurrentLine(track!.name)
+            return
+        }
+
+        if lyricsManager.errorMessage != nil {
+            // No lyrics found — show track info with hint
+            overlayWindow?.showTrackInfo(
+                title: track!.name,
+                artist: "\(track!.artist) · No lyrics available"
+            )
+            menuBarController?.updateCurrentLine(track!.name)
+            return
+        }
+
+        if index == -1 && spotifyBridge.isPlaying {
+            // Before first lyric line (intro) — show track info
+            let firstLine = lines.first?.text ?? ""
+            overlayWindow?.showTrackInfo(
+                title: track!.name,
+                artist: firstLine.isEmpty ? track!.artist : "♪ \(track!.artist)"
+            )
+            menuBarController?.updateCurrentLine(track!.name)
+            menuBarController?.updateLyrics(lines: lines, currentIndex: index)
+            desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
+            return
+        }
+
+        // Normal lyrics display
         overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
-
-        // Desktop Widget
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
 
-        // Menu Bar
         if spotifyBridge.isPlaying {
             menuBarController?.updateCurrentLine(currentLine)
         }
         menuBarController?.updateLyrics(lines: lines, currentIndex: index)
-
-        // Handle no track / no lyrics states
-        if spotifyBridge.currentTrack == nil {
-            overlayWindow?.updateLyrics(current: "", next: "")
-        } else if lyricsManager.errorMessage != nil {
-            overlayWindow?.updateLyrics(current: "♪ No lyrics found", next: "")
-        }
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
