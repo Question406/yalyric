@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 @MainActor
-class LyricsManager: ObservableObject {
+public class LyricsManager: ObservableObject {
     @Published var currentLyrics: Lyrics?
     @Published var isFetching: Bool = false
     @Published var errorMessage: String?

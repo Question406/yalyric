@@ -5,9 +5,20 @@ let package = Package(
     name: "LyricSync",
     platforms: [.macOS(.v13)],
     targets: [
+        .target(
+            name: "LyricSyncLib",
+            path: "Sources",
+            exclude: ["App/main.swift"]
+        ),
         .executableTarget(
             name: "LyricSync",
-            path: "Sources"
+            dependencies: ["LyricSyncLib"],
+            path: "Executable"
+        ),
+        .testTarget(
+            name: "LyricSyncTests",
+            dependencies: ["LyricSyncLib"],
+            path: "Tests"
         )
     ]
 )

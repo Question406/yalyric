@@ -1,11 +1,16 @@
 import Foundation
 
-struct LyricLine: Equatable {
-    let time: TimeInterval  // seconds
-    let text: String
+public struct LyricLine: Equatable {
+    public let time: TimeInterval  // seconds
+    public let text: String
+
+    public init(time: TimeInterval, text: String) {
+        self.time = time
+        self.text = text
+    }
 }
 
-enum LyricsSource: String {
+public enum LyricsSource: String {
     case lrclib
     case spotify
     case musixmatch
@@ -13,13 +18,19 @@ enum LyricsSource: String {
     case plain  // unsynced plain text
 }
 
-struct Lyrics {
-    let lines: [LyricLine]  // sorted by time
-    let source: LyricsSource
-    let isSynced: Bool
+public struct Lyrics {
+    public let lines: [LyricLine]  // sorted by time
+    public let source: LyricsSource
+    public let isSynced: Bool
+
+    public init(lines: [LyricLine], source: LyricsSource, isSynced: Bool) {
+        self.lines = lines
+        self.source = source
+        self.isSynced = isSynced
+    }
 
     /// Find the index of the current line for the given playback position
-    func currentLineIndex(at position: TimeInterval) -> Int? {
+    public func currentLineIndex(at position: TimeInterval) -> Int? {
         guard !lines.isEmpty else { return nil }
         if !isSynced { return nil }
 
@@ -42,12 +53,12 @@ struct Lyrics {
     }
 }
 
-struct LRCParser {
+public struct LRCParser {
     private static let timeTagRegex = try! NSRegularExpression(
         pattern: #"^\[(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?\]"#
     )
 
-    static func parse(_ lrcString: String) -> [LyricLine] {
+    public static func parse(_ lrcString: String) -> [LyricLine] {
         var lines: [LyricLine] = []
 
         for rawLine in lrcString.components(separatedBy: .newlines) {
@@ -97,7 +108,7 @@ struct LRCParser {
         return lines.sorted { $0.time < $1.time }
     }
 
-    static func parsePlain(_ text: String) -> [LyricLine] {
+    public static func parsePlain(_ text: String) -> [LyricLine] {
         let rawLines = text.components(separatedBy: .newlines)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }

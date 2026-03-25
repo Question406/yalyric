@@ -1,9 +1,9 @@
 import Foundation
 
-struct NetEaseProvider: LyricsProvider {
-    let source: LyricsSource = .netease
+public struct NetEaseProvider: LyricsProvider {
+    public let source: LyricsSource = .netease
 
-    func fetch(track: TrackInfo) async throws -> Lyrics? {
+    public func fetch(track: TrackInfo) async throws -> Lyrics? {
         // Step 1: Search for the song
         guard let songID = try await searchSong(track: track) else { return nil }
 

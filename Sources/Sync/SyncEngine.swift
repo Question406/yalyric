@@ -2,23 +2,25 @@ import Foundation
 import Combine
 
 @MainActor
-class SyncEngine: ObservableObject {
-    @Published var currentLineIndex: Int = -1
-    @Published var currentLine: String = ""
-    @Published var nextLine: String = ""
-    @Published var progress: Double = 0  // 0-1 within current line
+public class SyncEngine: ObservableObject {
+    @Published public var currentLineIndex: Int = -1
+    @Published public var currentLine: String = ""
+    @Published public var nextLine: String = ""
+    @Published public var progress: Double = 0  // 0-1 within current line
 
     private var lyrics: Lyrics?
 
-    var allLines: [LyricLine] {
+    public init() {}
+
+    public var allLines: [LyricLine] {
         lyrics?.lines ?? []
     }
 
-    var isSynced: Bool {
+    public var isSynced: Bool {
         lyrics?.isSynced ?? false
     }
 
-    func setLyrics(_ lyrics: Lyrics?) {
+    public func setLyrics(_ lyrics: Lyrics?) {
         self.lyrics = lyrics
         currentLineIndex = -1
         currentLine = ""
@@ -26,7 +28,7 @@ class SyncEngine: ObservableObject {
         progress = 0
     }
 
-    func update(position: TimeInterval) {
+    public func update(position: TimeInterval) {
         guard let lyrics = lyrics, !lyrics.lines.isEmpty else {
             currentLineIndex = -1
             currentLine = ""
@@ -47,12 +49,10 @@ class SyncEngine: ObservableObject {
 
         guard let index = lyrics.currentLineIndex(at: position) else {
             // Before first lyric line
-            if currentLineIndex != -1 {
-                currentLineIndex = -1
-                currentLine = ""
-                nextLine = lyrics.lines.first?.text ?? ""
-                progress = 0
-            }
+            currentLineIndex = -1
+            currentLine = ""
+            nextLine = lyrics.lines.first?.text ?? ""
+            progress = 0
             return
         }
 

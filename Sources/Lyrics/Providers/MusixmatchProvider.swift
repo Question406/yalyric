@@ -1,12 +1,12 @@
 import Foundation
 
-struct MusixmatchProvider: LyricsProvider {
-    let source: LyricsSource = .musixmatch
+public struct MusixmatchProvider: LyricsProvider {
+    public let source: LyricsSource = .musixmatch
 
     private static var cachedToken: String?
     private static var tokenExpiry: Date?
 
-    func fetch(track: TrackInfo) async throws -> Lyrics? {
+    public func fetch(track: TrackInfo) async throws -> Lyrics? {
         guard let token = try await getToken() else { return nil }
 
         var components = URLComponents(string: "https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get")!

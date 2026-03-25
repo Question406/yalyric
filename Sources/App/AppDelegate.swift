@@ -2,7 +2,7 @@ import AppKit
 import Combine
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+public class AppDelegate: NSObject, NSApplicationDelegate {
     private let spotifyBridge = SpotifyBridge()
     private let lyricsManager = LyricsManager()
     private let syncEngine = SyncEngine()
@@ -15,7 +15,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
     private var cancellables = Set<AnyCancellable>()
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon — menu bar app
         NSApp.setActivationPolicy(.accessory)
 
@@ -161,7 +161,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    public func applicationWillTerminate(_ notification: Notification) {
         spotifyBridge.stopPolling()
     }
 }

@@ -1,9 +1,9 @@
 import Foundation
 
-struct SpotifyInternalProvider: LyricsProvider {
-    let source: LyricsSource = .spotify
+public struct SpotifyInternalProvider: LyricsProvider {
+    public let source: LyricsSource = .spotify
 
-    func fetch(track: TrackInfo) async throws -> Lyrics? {
+    public func fetch(track: TrackInfo) async throws -> Lyrics? {
         let cookie = UserDefaults.standard.string(forKey: "spDCCookie") ?? ""
         guard !cookie.isEmpty else { return nil }
 

@@ -1,9 +1,9 @@
 import Foundation
 
-struct LRCLIBProvider: LyricsProvider {
-    let source: LyricsSource = .lrclib
+public struct LRCLIBProvider: LyricsProvider {
+    public let source: LyricsSource = .lrclib
 
-    func fetch(track: TrackInfo) async throws -> Lyrics? {
+    public func fetch(track: TrackInfo) async throws -> Lyrics? {
         // Try exact match first
         if let lyrics = try await fetchExact(track: track) {
             return lyrics
