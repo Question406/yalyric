@@ -46,26 +46,33 @@ public struct LRCLIBProvider: LyricsProvider {
 
         guard let results = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
 
-        // Find best match by duration (within 5s tolerance)
+        // Filter by duration (within 5s tolerance)
         let targetDuration = track.duration
-        let bestResult = results
-            .filter { result in
-                guard let duration = result["duration"] as? Double else { return false }
-                return abs(duration - targetDuration) < 5.0
-            }
-            .first { result in
-                // Prefer results that have synced lyrics
-                if let synced = result["syncedLyrics"] as? String, !synced.isEmpty { return true }
-                return false
-            }
-            ?? results.first(where: { result in
-                guard let duration = result["duration"] as? Double else { return false }
-                return abs(duration - targetDuration) < 5.0
-            })
+        let durationMatched = results.filter { result in
+            guard let duration = result["duration"] as? Double else { return false }
+            return abs(duration - targetDuration) < 5.0
+        }
 
-        guard let match = bestResult else { return nil }
+        guard !durationMatched.isEmpty else { return nil }
 
-        let resultData = try JSONSerialization.data(withJSONObject: match)
+        // Score results: prefer exact artist/track name match + synced lyrics
+        let trackNameLower = track.name.lowercased()
+        let artistLower = track.artist.lowercased()
+
+        let scored = durationMatched.map { result -> (result: [String: Any], score: Int) in
+            var score = 0
+            if let name = result["trackName"] as? String,
+               name.lowercased() == trackNameLower { score += 2 }
+            if let artist = result["artistName"] as? String,
+               artist.lowercased() == artistLower { score += 2 }
+            if let synced = result["syncedLyrics"] as? String,
+               !synced.isEmpty { score += 1 }
+            return (result, score)
+        }.sorted { $0.score > $1.score }
+
+        guard let best = scored.first else { return nil }
+
+        let resultData = try JSONSerialization.data(withJSONObject: best.result)
         return try parseLRCLIBResponse(resultData)
     }
 

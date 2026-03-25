@@ -37,18 +37,34 @@ public class LyricsManager: ObservableObject {
         isFetching = true
         errorMessage = nil
 
+        let langPref = UserDefaults.standard.string(forKey: "lyricsLanguage")
+            .flatMap { LyricsLanguagePreference(rawValue: $0) } ?? .auto
+
         currentFetchTask = Task {
             var bestLyrics: Lyrics?
+            var fallbackLyrics: Lyrics?  // wrong language but still usable
 
             for provider in providers {
                 if Task.isCancelled { return }
                 do {
                     if let lyrics = try await provider.fetch(track: track) {
-                        if lyrics.isSynced {
+                        let langMatch = LyricsLanguageDetector.matches(
+                            lyrics: lyrics,
+                            preference: langPref,
+                            trackName: track.name,
+                            trackArtist: track.artist
+                        )
+
+                        if lyrics.isSynced && langMatch {
                             bestLyrics = lyrics
                             break
-                        } else if bestLyrics == nil {
+                        } else if lyrics.isSynced && fallbackLyrics == nil {
+                            // Wrong language but synced — keep as fallback
+                            fallbackLyrics = lyrics
+                        } else if bestLyrics == nil && langMatch {
                             bestLyrics = lyrics
+                        } else if fallbackLyrics == nil {
+                            fallbackLyrics = lyrics
                         }
                     }
                 } catch {
@@ -57,11 +73,12 @@ public class LyricsManager: ObservableObject {
             }
 
             if Task.isCancelled { return }
-
-            // Verify track hasn't changed during fetch
             guard currentTrackID == trackID else { return }
 
-            if let lyrics = bestLyrics {
+            // Prefer language-matched lyrics, fall back to any lyrics
+            let result = bestLyrics ?? fallbackLyrics
+
+            if let lyrics = result {
                 cache[trackID] = lyrics
                 currentLyrics = lyrics
                 errorMessage = nil

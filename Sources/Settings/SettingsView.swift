@@ -24,6 +24,10 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(spDCCookie, forKey: "spDCCookie") }
     }
 
+    @Published var lyricsLanguage: LyricsLanguagePreference {
+        didSet { UserDefaults.standard.set(lyricsLanguage.rawValue, forKey: "lyricsLanguage") }
+    }
+
     private init() {
         if let saved = UserDefaults.standard.stringArray(forKey: "enabledDisplayModes") {
             enabledDisplayModes = Set(saved.compactMap { DisplayMode(rawValue: $0) })
@@ -35,13 +39,20 @@ class SettingsManager: ObservableObject {
         fontSize = savedSize > 0 ? CGFloat(savedSize) : 24
 
         spDCCookie = UserDefaults.standard.string(forKey: "spDCCookie") ?? ""
+
+        if let savedLang = UserDefaults.standard.string(forKey: "lyricsLanguage"),
+           let lang = LyricsLanguagePreference(rawValue: savedLang) {
+            lyricsLanguage = lang
+        } else {
+            lyricsLanguage = .auto
+        }
     }
 }
 
 class SettingsWindowController: NSWindowController {
     convenience init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 350),
+            contentRect: NSRect(x: 0, y: 0, width: 450, height: 420),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -60,7 +71,7 @@ class SettingsWindowController: NSWindowController {
         let container = NSView(frame: window.contentView!.bounds)
         container.autoresizingMask = [.width, .height]
 
-        var yOffset: CGFloat = 300
+        var yOffset: CGFloat = 370
 
         // Section: Display Modes
         let modeTitle = makeLabel("Display Modes", bold: true)
@@ -80,6 +91,29 @@ class SettingsWindowController: NSWindowController {
         }
 
         yOffset -= 10
+
+        // Section: Lyrics Language
+        let langTitle = makeLabel("Lyrics Language", bold: true)
+        langTitle.frame.origin = NSPoint(x: 20, y: yOffset)
+        container.addSubview(langTitle)
+        yOffset -= 28
+
+        let langPopup = NSPopUpButton(frame: NSRect(x: 30, y: yOffset, width: 280, height: 26), pullsDown: false)
+        for lang in LyricsLanguagePreference.allCases {
+            langPopup.addItem(withTitle: lang.rawValue)
+        }
+        langPopup.selectItem(withTitle: settings.lyricsLanguage.rawValue)
+        langPopup.target = self
+        langPopup.action = #selector(languageChanged(_:))
+        container.addSubview(langPopup)
+        yOffset -= 22
+
+        let langHint = makeLabel("\"Auto\" detects the song's language and filters mismatched lyrics", bold: false)
+        langHint.font = NSFont.systemFont(ofSize: 11)
+        langHint.textColor = .secondaryLabelColor
+        langHint.frame.origin = NSPoint(x: 30, y: yOffset)
+        container.addSubview(langHint)
+        yOffset -= 30
 
         // Section: Spotify SP_DC Cookie
         let cookieTitle = makeLabel("Spotify SP_DC Cookie (for Spotify lyrics source)", bold: true)
@@ -133,13 +167,18 @@ class SettingsWindowController: NSWindowController {
         NotificationCenter.default.post(name: .displayModesChanged, object: nil)
     }
 
+    @objc private func languageChanged(_ sender: NSPopUpButton) {
+        guard let title = sender.selectedItem?.title,
+              let lang = LyricsLanguagePreference(rawValue: title) else { return }
+        SettingsManager.shared.lyricsLanguage = lang
+    }
+
     @objc private func cookieChanged(_ sender: NSTextField) {
         SettingsManager.shared.spDCCookie = sender.stringValue
     }
 
     @objc private func fontSizeChanged(_ sender: NSSlider) {
         SettingsManager.shared.fontSize = CGFloat(sender.doubleValue)
-        // Update the label
         if let label = window?.contentView?.viewWithTag(999) as? NSTextField {
             label.stringValue = "Font Size: \(Int(sender.doubleValue))pt"
         }
