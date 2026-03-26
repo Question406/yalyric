@@ -1,90 +1,73 @@
-import Testing
+import XCTest
 @testable import yalyricLib
 
-@Suite("Lyrics Model — Binary Search")
-struct LyricsModelTests {
+final class LyricsModelTests: XCTestCase {
 
     private func makeSyncedLyrics(_ times: [Double]) -> Lyrics {
-        let lines = times.enumerated().map { i, t in
-            LyricLine(time: t, text: "Line \(i)")
-        }
+        let lines = times.enumerated().map { i, t in LyricLine(time: t, text: "Line \(i)") }
         return Lyrics(lines: lines, source: .lrclib, isSynced: true)
     }
 
-    @Test("Basic index lookup at various positions")
-    func currentLineIndexBasic() {
+    func testCurrentLineIndexBasic() {
         let lyrics = makeSyncedLyrics([10, 20, 30, 40, 50])
-
-        #expect(lyrics.currentLineIndex(at: 10) == 0)
-        #expect(lyrics.currentLineIndex(at: 15) == 0)
-        #expect(lyrics.currentLineIndex(at: 20) == 1)
-        #expect(lyrics.currentLineIndex(at: 35) == 2)
-        #expect(lyrics.currentLineIndex(at: 50) == 4)
-        #expect(lyrics.currentLineIndex(at: 99) == 4)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 15), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 20), 1)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 35), 2)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 50), 4)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 99), 4)
     }
 
-    @Test("Returns nil before the first line")
-    func beforeFirstLine() {
+    func testBeforeFirstLine() {
         let lyrics = makeSyncedLyrics([10, 20, 30])
-        #expect(lyrics.currentLineIndex(at: 0) == nil)
-        #expect(lyrics.currentLineIndex(at: 5) == nil)
-        #expect(lyrics.currentLineIndex(at: 9.999) == nil)
+        XCTAssertNil(lyrics.currentLineIndex(at: 0))
+        XCTAssertNil(lyrics.currentLineIndex(at: 5))
+        XCTAssertNil(lyrics.currentLineIndex(at: 9.999))
     }
 
-    @Test("Exact timestamps match the corresponding line")
-    func exactTimestamps() {
+    func testExactTimestamps() {
         let lyrics = makeSyncedLyrics([10, 20, 30])
-
-        #expect(lyrics.currentLineIndex(at: 10) == 0)
-        #expect(lyrics.currentLineIndex(at: 20) == 1)
-        #expect(lyrics.currentLineIndex(at: 30) == 2)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 20), 1)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 30), 2)
     }
 
-    @Test("Single line lyrics")
-    func singleLine() {
+    func testSingleLine() {
         let lyrics = makeSyncedLyrics([5.0])
-
-        #expect(lyrics.currentLineIndex(at: 0) == nil)
-        #expect(lyrics.currentLineIndex(at: 5) == 0)
-        #expect(lyrics.currentLineIndex(at: 100) == 0)
+        XCTAssertNil(lyrics.currentLineIndex(at: 0))
+        XCTAssertEqual(lyrics.currentLineIndex(at: 5), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 100), 0)
     }
 
-    @Test("Empty lyrics returns nil")
-    func emptyLyrics() {
+    func testEmptyLyrics() {
         let lyrics = Lyrics(lines: [], source: .lrclib, isSynced: true)
-        #expect(lyrics.currentLineIndex(at: 0) == nil)
-        #expect(lyrics.currentLineIndex(at: 50) == nil)
+        XCTAssertNil(lyrics.currentLineIndex(at: 0))
+        XCTAssertNil(lyrics.currentLineIndex(at: 50))
     }
 
-    @Test("Unsynced lyrics always return nil")
-    func unsyncedReturnsNil() {
+    func testUnsyncedReturnsNil() {
         let lines = [LyricLine(time: 0, text: "A"), LyricLine(time: 1, text: "B")]
         let lyrics = Lyrics(lines: lines, source: .plain, isSynced: false)
-
-        #expect(lyrics.currentLineIndex(at: 0) == nil)
-        #expect(lyrics.currentLineIndex(at: 1) == nil)
+        XCTAssertNil(lyrics.currentLineIndex(at: 0))
+        XCTAssertNil(lyrics.currentLineIndex(at: 1))
     }
 
-    @Test("Close timestamps (100ms apart)")
-    func closeTimestamps() {
+    func testCloseTimestamps() {
         let lyrics = makeSyncedLyrics([10.0, 10.1, 10.2, 10.3])
-
-        #expect(lyrics.currentLineIndex(at: 10.0) == 0)
-        #expect(lyrics.currentLineIndex(at: 10.05) == 0)
-        #expect(lyrics.currentLineIndex(at: 10.1) == 1)
-        #expect(lyrics.currentLineIndex(at: 10.15) == 1)
-        #expect(lyrics.currentLineIndex(at: 10.3) == 3)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10.0), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10.05), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10.1), 1)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10.15), 1)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 10.3), 3)
     }
 
-    @Test("1000 lines — binary search correctness")
-    func manyLines() {
+    func testManyLines() {
         let times = (0..<1000).map { Double($0) * 2.5 }
         let lyrics = makeSyncedLyrics(times)
-
-        #expect(lyrics.currentLineIndex(at: 0) == 0)
-        #expect(lyrics.currentLineIndex(at: 250) == 100)
-        #expect(lyrics.currentLineIndex(at: 1000) == 400)
-        #expect(lyrics.currentLineIndex(at: 2497.5) == 999)
-        #expect(lyrics.currentLineIndex(at: 5000) == 999)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 0), 0)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 250), 100)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 1000), 400)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 2497.5), 999)
+        XCTAssertEqual(lyrics.currentLineIndex(at: 5000), 999)
     }
 }
