@@ -59,9 +59,13 @@ Providers are tried in waterfall order — the first one to return synced lyrics
 
 1. Download `yalyric-vX.X.X-macos.zip` from [GitHub Releases](https://github.com/yourname/yalyric/releases)
 2. Unzip and drag `yalyric.app` to `/Applications`
-3. Double-click to launch
+3. Remove the quarantine flag (required for unsigned apps):
+   ```bash
+   xattr -cr /Applications/yalyric.app
+   ```
+4. Double-click to launch
 
-> **Note:** Since the app is not signed, macOS will block it on first launch. Right-click the app → Open → click "Open" in the dialog. On macOS Sequoia, you may need to go to System Settings → Privacy & Security → click "Open Anyway".
+> **Why step 3?** macOS quarantines apps downloaded from the internet. Without code signing, the app shows *"yalyric is damaged"* — it's not actually damaged, just unsigned. The `xattr -cr` command removes the quarantine flag.
 
 ### Build from Source
 
