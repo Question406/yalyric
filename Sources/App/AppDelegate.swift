@@ -21,7 +21,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hasEverPlayed = false
 
     private enum DisplayState: Equatable {
-        case noTrack, permissionDenied, loading, noLyrics, intro, lyrics
+        case noTrack, nonMusic, permissionDenied, loading, noLyrics, intro, lyrics
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -245,6 +245,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let state: DisplayState
         if spotifyBridge.permissionDenied {
             state = .permissionDenied
+        } else if track == nil && spotifyBridge.nonMusicTitle != nil {
+            state = .nonMusic
         } else if track == nil {
             state = .noTrack
         } else if lyricsManager.isFetching {
@@ -272,6 +274,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 artist: "System Settings → Privacy → Automation → enable Spotify for yalyric"
             )
             menuBarController?.updateCurrentLine("Permission needed")
+            return
+        }
+
+        if let nonMusicTitle = spotifyBridge.nonMusicTitle, track == nil {
+            // Podcast, DJ interlude, or ad — hide overlay, show title in menu bar
+            overlayWindow?.updateSource(nil)
+            overlayWindow?.updateLyrics(current: "", next: "")
+            menuBarController?.updateCurrentLine("🎙 \(nonMusicTitle)")
             return
         }
 

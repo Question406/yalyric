@@ -7,6 +7,7 @@ class SpotifyBridge: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var playbackPosition: TimeInterval = 0
     @Published var permissionDenied: Bool = false
+    @Published var nonMusicTitle: String?  // podcast/DJ name when currentTrack is nil
 
     private var pollTimer: Timer?
     private let activeInterval: TimeInterval = 0.5
@@ -126,6 +127,14 @@ class SpotifyBridge: ObservableObject {
 
         isPlaying = (state == "playing")
         playbackPosition = position
+
+        // Filter non-music content: DJ interludes, podcasts, ads
+        if !trackID.hasPrefix("spotify:track:") || durationMs <= 0 {
+            currentTrack = nil
+            nonMusicTitle = name
+            return
+        }
+        nonMusicTitle = nil
 
         let track = TrackInfo(
             id: trackID,
