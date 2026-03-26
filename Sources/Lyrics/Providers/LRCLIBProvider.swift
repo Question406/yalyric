@@ -4,15 +4,11 @@ public struct LRCLIBProvider: LyricsProvider {
     public let source: LyricsSource = .lrclib
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
-        // Try exact match with duration
-        if let lyrics = try await fetchExact(track: track, includeDuration: true) {
-            return lyrics
-        }
-        // Try exact match without duration (Spotify sometimes reports wrong duration)
+        // Try without duration first — faster and avoids Spotify's inaccurate durations
         if let lyrics = try await fetchExact(track: track, includeDuration: false) {
             return lyrics
         }
-        // Fallback to search
+        // Fallback to search (broader matching)
         return try await fetchSearch(track: track)
     }
 
@@ -53,24 +49,20 @@ public struct LRCLIBProvider: LyricsProvider {
 
         guard let results = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
 
-        // Score results: prefer exact artist/track name match + close duration + synced lyrics
-        let targetDuration = track.duration
-        let trackNameLower = track.name.lowercased()
-        let artistLower = track.artist.lowercased()
-
+        // Score results using shared validation + synced lyrics bonus
         let scored = results.map { result -> (result: [String: Any], score: Int) in
-            var score = 0
-            if let name = result["trackName"] as? String,
-               name.lowercased() == trackNameLower { score += 2 }
-            if let artist = result["artistName"] as? String,
-               artist.lowercased() == artistLower { score += 2 }
+            var score = SearchMatchScore.score(
+                resultName: result["trackName"] as? String,
+                resultArtist: result["artistName"] as? String,
+                resultDurationMs: (result["duration"] as? Double).map { $0 * 1000 },
+                track: track
+            )
             if let synced = result["syncedLyrics"] as? String,
                !synced.isEmpty { score += 1 }
-            // Duration within tolerance gets a bonus; Spotify sometimes reports inaccurate durations
-            if let duration = result["duration"] as? Double,
-               abs(duration - targetDuration) < durationToleranceSeconds { score += 2 }
             return (result, score)
-        }.sorted { $0.score > $1.score }
+        }
+        .filter { $0.score >= SearchMatchScore.minimumScore }
+        .sorted { $0.score > $1.score }
 
         guard let best = scored.first else { return nil }
 

@@ -31,25 +31,32 @@ public struct NetEaseProvider: LyricsProvider {
               let result = json["result"] as? [String: Any],
               let songs = result["songs"] as? [[String: Any]] else { return nil }
 
-        // Find best match by duration
-        let targetDuration = track.duration * 1000  // NetEase uses ms
-        var bestMatch: (id: Int, diff: Double)?
-
-        for song in songs {
+        // Score each result using shared validation
+        let scored: [(id: Int, score: Int, durationDiff: Double)] = songs.compactMap { song in
             guard let id = song["id"] as? Int,
-                  let duration = song["duration"] as? Double else { continue }
+                  let duration = song["duration"] as? Double else { return nil }
 
-            let diff = abs(duration - targetDuration)
-            if bestMatch == nil || diff < bestMatch!.diff {
-                bestMatch = (id, diff)
-            }
+            // NetEase has artists as an array of {name: ...}
+            let artistName = (song["artists"] as? [[String: Any]])?
+                .compactMap { $0["name"] as? String }
+                .joined(separator: " ")
+
+            let score = SearchMatchScore.score(
+                resultName: song["name"] as? String,
+                resultArtist: artistName,
+                resultDurationMs: duration,
+                track: track
+            )
+
+            return (id, score, abs(duration - track.duration * 1000))
         }
 
-        // Accept if duration difference is within configured tolerance
-        if let match = bestMatch, match.diff < durationToleranceSeconds * 1000 {
-            return match.id
-        }
-        return nil
+        let best = scored
+            .filter { $0.score >= SearchMatchScore.minimumScore }
+            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.durationDiff < $1.durationDiff }
+            .first
+
+        return best?.id
     }
 
     private func fetchLyrics(songID: Int) async throws -> Lyrics? {

@@ -3,8 +3,12 @@ import Foundation
 public struct MusixmatchProvider: LyricsProvider {
     public let source: LyricsSource = .musixmatch
 
-    private static var cachedToken: String?
-    private static var tokenExpiry: Date?
+    // Persisted to UserDefaults — Musixmatch captcha-blocks token re-auth after first request
+    private static var cachedToken: String? = UserDefaults.standard.string(forKey: "musixmatch.token")
+    private static var tokenExpiry: Date? = {
+        let ts = UserDefaults.standard.double(forKey: "musixmatch.tokenExpiry")
+        return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
+    }()
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
         guard let token = try await getToken() else { return nil }
@@ -23,13 +27,13 @@ public struct MusixmatchProvider: LyricsProvider {
         ]
 
         guard let url = components.url else { return nil }
-        let request = providerRequest(url: url)
+        let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
-        return try parseResponse(data)
+        return try parseResponse(data, track: track)
     }
 
     private func getToken() async throws -> String? {
@@ -42,7 +46,7 @@ public struct MusixmatchProvider: LyricsProvider {
 
         guard let url = URL(string: "https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0") else { return nil }
 
-        let request = providerRequest(url: url)
+        let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -53,16 +57,36 @@ public struct MusixmatchProvider: LyricsProvider {
               let body = message["body"] as? [String: Any],
               let token = body["user_token"] as? String else { return nil }
 
+        let expiry = Date().addingTimeInterval(3600)  // 1 hour — re-auth is captcha-blocked
         Self.cachedToken = token
-        Self.tokenExpiry = Date().addingTimeInterval(600)  // 10 min cache
+        Self.tokenExpiry = expiry
+        UserDefaults.standard.set(token, forKey: "musixmatch.token")
+        UserDefaults.standard.set(expiry.timeIntervalSince1970, forKey: "musixmatch.tokenExpiry")
         return token
     }
 
-    private func parseResponse(_ data: Data) throws -> Lyrics? {
+    private func parseResponse(_ data: Data, track: TrackInfo) throws -> Lyrics? {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? [String: Any],
               let body = message["body"] as? [String: Any],
               let macroCalls = body["macro_calls"] as? [String: Any] else { return nil }
+
+        // Validate matched track name/artist from the response
+        if let matcherGet = macroCalls["matcher.track.get"] as? [String: Any],
+           let matchMsg = matcherGet["message"] as? [String: Any],
+           let matchBody = matchMsg["body"] as? [String: Any],
+           let matchTrack = matchBody["track"] as? [String: Any] {
+            let score = SearchMatchScore.score(
+                resultName: matchTrack["track_name"] as? String,
+                resultArtist: matchTrack["artist_name"] as? String,
+                resultDurationMs: (matchTrack["track_length"] as? Double).map { $0 * 1000 },
+                track: track
+            )
+            if score < SearchMatchScore.minimumScore {
+                print("[musixmatch] Rejected: matched '\(matchTrack["track_name"] ?? "")' by '\(matchTrack["artist_name"] ?? "")' (score \(score))")
+                return nil
+            }
+        }
 
         // Try synced subtitles first
         if let subtitleGet = macroCalls["track.subtitles.get"] as? [String: Any],
