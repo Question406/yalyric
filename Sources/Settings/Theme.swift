@@ -72,6 +72,8 @@ struct Theme: Equatable {
             && lhs.animationDuration == rhs.animationDuration
             && lhs.overlayPosition == rhs.overlayPosition
             && lhs.overlayWidth == rhs.overlayWidth
+            && lhs.karaokeFillEnabled == rhs.karaokeFillEnabled
+            && lhs.fillEdgeWidth == rhs.fillEdgeWidth
     }
 
     // Typography
@@ -98,6 +100,10 @@ struct Theme: Equatable {
     // Animation
     var transitionStyle: TransitionStyle = .slideUp
     var animationDuration: TimeInterval = 0.5
+
+    // Karaoke fill
+    var karaokeFillEnabled: Bool = false
+    var fillEdgeWidth: CGFloat = 0.06  // 6% of line width — soft edge
 
     // Layout
     var overlayPosition: OverlayPosition = .bottomCenter
@@ -179,6 +185,8 @@ class ThemeManager: ObservableObject {
             t.backgroundStyle = .bar
             t.backgroundColor = NSColor.black.withAlphaComponent(0.3)
             t.backgroundOpacity = 0.4
+            t.karaokeFillEnabled = true
+            t.fillEdgeWidth = 0.06
             return t
         }()),
         ("Spotify", {
@@ -235,6 +243,8 @@ class ThemeManager: ObservableObject {
         d.set(theme.overlayPosition.rawValue, forKey: "theme.overlayPosition")
         d.set(Double(theme.overlayWidth), forKey: "theme.overlayWidth")
         d.set(Double(theme.nextLineOpacity), forKey: "theme.nextLineOpacity")
+        d.set(theme.karaokeFillEnabled, forKey: "theme.karaokeFillEnabled")
+        d.set(Double(theme.fillEdgeWidth), forKey: "theme.fillEdgeWidth")
         d.set(Double(theme.shadowBlurRadius), forKey: "theme.shadowBlurRadius")
         d.set(Double(theme.shadowOffsetX), forKey: "theme.shadowOffsetX")
         d.set(Double(theme.shadowOffsetY), forKey: "theme.shadowOffsetY")
@@ -288,6 +298,12 @@ class ThemeManager: ObservableObject {
         let nlo = d.double(forKey: "theme.nextLineOpacity")
         if nlo > 0 { t.nextLineOpacity = CGFloat(nlo) }
 
+        if d.object(forKey: "theme.karaokeFillEnabled") != nil {
+            t.karaokeFillEnabled = d.bool(forKey: "theme.karaokeFillEnabled")
+        }
+        let few = d.double(forKey: "theme.fillEdgeWidth")
+        if few > 0 { t.fillEdgeWidth = CGFloat(few) }
+
         if let data = d.data(forKey: "theme.textColor"),
            let color = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
             t.textColor = color
@@ -306,7 +322,11 @@ class ThemeManager: ObservableObject {
 
     func applyPreset(_ name: String) {
         if let preset = Self.presets.first(where: { $0.name == name }) {
-            theme = preset.theme
+            var newTheme = preset.theme
+            // Preserve karaoke fill settings — it's a feature toggle, not a style
+            newTheme.karaokeFillEnabled = theme.karaokeFillEnabled
+            newTheme.fillEdgeWidth = theme.fillEdgeWidth
+            theme = newTheme
         }
     }
 }

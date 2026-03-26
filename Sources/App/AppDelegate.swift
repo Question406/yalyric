@@ -257,8 +257,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             state = .lyrics
         }
 
-        // Skip if nothing changed (only for normal lyrics state where index matters)
-        if state == .lyrics && state == lastDisplayState && index == lastDisplayedLineIndex {
+        // Skip if nothing changed — but always update progress for karaoke fill
+        let karaokeFillActive = ThemeManager.shared.theme.karaokeFillEnabled
+        if state == .lyrics && state == lastDisplayState && index == lastDisplayedLineIndex && !karaokeFillActive {
             return
         }
         lastDisplayState = state
@@ -319,6 +320,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Normal lyrics display
         overlayWindow?.updateSource(lyricsManager.currentLyrics?.source)
         overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
+        overlayWindow?.updateProgress(syncEngine.progress)
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
 
         if spotifyBridge.isPlaying {

@@ -23,7 +23,12 @@ class OverlayWindow: NSWindow {
     private var isAnimating = false
     private var isMouseInside = false
     private(set) var isEditMode = false
+    private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
+
+    // Karaoke fill gradient masks
+    private var gradientMaskA: CAGradientLayer?
+    private var gradientMaskB: CAGradientLayer?
 
     init() {
         let theme = ThemeManager.shared.theme
@@ -200,14 +205,19 @@ class OverlayWindow: NSWindow {
     func applyTheme(_ theme: Theme) {
         let shadow = theme.textShadow
 
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = .center
+
         for label in [currentLabelA, currentLabelB] {
             label.font = theme.currentLineFont
             label.textColor = theme.textColor
             label.shadow = shadow
             label.layer?.setAffineTransform(.identity)
             let str = NSMutableAttributedString(string: label.stringValue)
+            let range = NSRange(location: 0, length: str.length)
+            str.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
             if theme.letterSpacing != 0 {
-                str.addAttribute(.kern, value: theme.letterSpacing, range: NSRange(location: 0, length: str.length))
+                str.addAttribute(.kern, value: theme.letterSpacing, range: range)
             }
             label.attributedStringValue = str
         }
@@ -217,7 +227,19 @@ class OverlayWindow: NSWindow {
         nextLyricLabel.shadow = shadow
 
         applyBackground(theme)
-        applyPosition(theme)
+
+        // Only reposition when position-related properties change
+        let posKey = "\(theme.overlayPosition.rawValue)|\(theme.overlayWidth)|\(theme.backgroundStyle.rawValue)"
+        if posKey != lastPositionKey {
+            lastPositionKey = posKey
+            applyPosition(theme)
+        }
+
+        applyKaraokeFill(theme)
+
+        // Re-apply dynamic width with current text (handles font/size changes)
+        let activeLabel = useA ? currentLabelA : currentLabelB
+        resizeToFit(currentText: activeLabel.stringValue, nextText: nextLyricLabel.stringValue, animated: false)
     }
 
     private func applyBackground(_ theme: Theme) {
@@ -354,13 +376,89 @@ class OverlayWindow: NSWindow {
         }
     }
 
+    // MARK: - Karaoke Fill
+
+    private func setupGradientMask(for label: NSTextField) -> CAGradientLayer {
+        let gradient = CAGradientLayer()
+        gradient.startPoint = CGPoint(x: 0, y: 0.5)
+        gradient.endPoint = CGPoint(x: 1, y: 0.5)
+        gradient.frame = label.bounds
+        // Start fully dim (unfilled)
+        gradient.colors = [NSColor.white.cgColor, NSColor.white.cgColor,
+                           NSColor.white.withAlphaComponent(0.35).cgColor,
+                           NSColor.white.withAlphaComponent(0.35).cgColor]
+        gradient.locations = [0, 0, 0.001, 1]
+        return gradient
+    }
+
+    private func applyKaraokeFill(_ theme: Theme) {
+        if theme.karaokeFillEnabled {
+            // Ensure layout is current before reading bounds
+            contentView?.layoutSubtreeIfNeeded()
+
+            // Create masks if needed
+            if gradientMaskA == nil {
+                let mask = setupGradientMask(for: currentLabelA)
+                currentLabelA.layer?.mask = mask
+                gradientMaskA = mask
+            }
+            if gradientMaskB == nil {
+                let mask = setupGradientMask(for: currentLabelB)
+                currentLabelB.layer?.mask = mask
+                gradientMaskB = mask
+            }
+            // Always sync mask frames to current label bounds
+            gradientMaskA?.frame = currentLabelA.bounds
+            gradientMaskB?.frame = currentLabelB.bounds
+        } else {
+            // Remove masks
+            currentLabelA.layer?.mask = nil
+            currentLabelB.layer?.mask = nil
+            gradientMaskA = nil
+            gradientMaskB = nil
+        }
+    }
+
+    func updateProgress(_ progress: Double) {
+        let theme = ThemeManager.shared.theme
+        guard theme.karaokeFillEnabled else { return }
+
+        let activeLabel = useA ? currentLabelA : currentLabelB
+        guard let mask = activeLabel.layer?.mask as? CAGradientLayer else { return }
+
+        // Update mask frame to match label
+        mask.frame = activeLabel.bounds
+
+        let p = Float(max(0, min(1, progress)))
+        let edge = Float(theme.fillEdgeWidth)
+        let newLocations: [NSNumber] = [0, NSNumber(value: p), NSNumber(value: p + edge), 1]
+
+        // Animate smoothly between poll updates (0.5s interval)
+        let anim = CABasicAnimation(keyPath: "locations")
+        anim.fromValue = mask.presentation()?.locations ?? mask.locations
+        anim.toValue = newLocations
+        anim.duration = 0.5
+        anim.timingFunction = CAMediaTimingFunction(name: .linear)
+        anim.isRemovedOnCompletion = false
+        anim.fillMode = .forwards
+
+        // Set model value and add animation
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mask.locations = newLocations
+        CATransaction.commit()
+        mask.add(anim, forKey: "karaokeFill")
+    }
+
     // MARK: - Reset labels to clean state
 
     /// Cancel any in-flight animation and snap labels to a clean state
     private func resetLabelsToCleanState() {
-        // Remove all animations
+        // Remove all animations (including karaoke fill on masks)
         currentLabelA.layer?.removeAllAnimations()
         currentLabelB.layer?.removeAllAnimations()
+        gradientMaskA?.removeAnimation(forKey: "karaokeFill")
+        gradientMaskB?.removeAnimation(forKey: "karaokeFill")
 
         let restY: CGFloat = 8
         let activeLabel = useA ? currentLabelA : currentLabelB
@@ -400,6 +498,16 @@ class OverlayWindow: NSWindow {
 
             incomingLabel.stringValue = current
             resizeToFit(currentText: current, nextText: next, animated: theme.transitionStyle != .none)
+
+            // Reset karaoke fill on the incoming label to start from 0
+            if let mask = incomingLabel.layer?.mask as? CAGradientLayer {
+                mask.removeAnimation(forKey: "karaokeFill")
+                CATransaction.begin()
+                CATransaction.setDisableActions(true)
+                mask.frame = incomingLabel.bounds
+                mask.locations = [0, 0, NSNumber(value: Float(theme.fillEdgeWidth)), 1]
+                CATransaction.commit()
+            }
 
             switch theme.transitionStyle {
             case .none:

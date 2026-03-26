@@ -173,4 +173,44 @@ final class SyncEngineTests: XCTestCase {
         XCTAssertEqual(engine.currentLine, "")
         XCTAssertEqual(engine.nextLine, "First line")
     }
+
+    // MARK: - Offset Tests
+
+    func testPositiveOffset() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeSyncedLyrics())
+        engine.offset = 5.0  // lyrics 5s earlier
+        // At position 5.0, adjusted = 10.0, should be on "Second line"
+        engine.update(position: 5.0)
+        XCTAssertEqual(engine.currentLineIndex, 1)
+        XCTAssertEqual(engine.currentLine, "Second line")
+    }
+
+    func testNegativeOffset() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeSyncedLyrics())
+        engine.offset = -3.0  // lyrics 3s later
+        // At position 12.0, adjusted = 9.0, should still be on "First line"
+        engine.update(position: 12.0)
+        XCTAssertEqual(engine.currentLineIndex, 0)
+        XCTAssertEqual(engine.currentLine, "First line")
+    }
+
+    func testOffsetProgressCalculation() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeSyncedLyrics())
+        engine.offset = 2.0
+        // At position 5.5, adjusted = 7.5, line 0 (5.0-10.0), progress = 2.5/5.0 = 0.5
+        engine.update(position: 5.5)
+        XCTAssertEqual(engine.currentLineIndex, 0)
+        XCTAssertEqual(engine.progress, 0.5, accuracy: 0.01)
+    }
+
+    func testOffsetResetOnNewLyrics() {
+        let engine = SyncEngine()
+        engine.offset = 3.0
+        engine.setLyrics(makeSyncedLyrics())
+        // Offset should persist across setLyrics
+        XCTAssertEqual(engine.offset, 3.0)
+    }
 }

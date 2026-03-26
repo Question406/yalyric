@@ -278,6 +278,22 @@ struct AppearanceTab: View {
                 }
             }
 
+            Section("Karaoke Fill") {
+                Toggle("Enable line fill effect", isOn: $themeManager.theme.karaokeFillEnabled)
+                if themeManager.theme.karaokeFillEnabled {
+                    LabeledSlider(
+                        label: "Edge softness",
+                        value: $themeManager.theme.fillEdgeWidth,
+                        range: 0.02...0.20,
+                        format: "%.0f%%",
+                        displayMultiplier: 100
+                    )
+                    Text("A gradient sweeps across the current line in sync with the song")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Animation") {
                 Picker("Transition", selection: $themeManager.theme.transitionStyle) {
                     ForEach(TransitionStyle.allCases, id: \.rawValue) { style in
