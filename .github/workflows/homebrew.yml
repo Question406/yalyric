@@ -1,0 +1,63 @@
+name: Update Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-cask:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info
+        id: release
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # Get the zip URL and SHA256
+          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/yalyric-v${VERSION}-macos.zip"
+          echo "url=$ZIP_URL" >> "$GITHUB_OUTPUT"
+
+          curl -sL "$ZIP_URL" -o yalyric.zip
+          SHA=$(shasum -a 256 yalyric.zip | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Update cask in tap repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Write cask formula
+        run: |
+          mkdir -p homebrew-tap/Casks
+          cat > homebrew-tap/Casks/yalyric.rb << 'RUBY'
+          cask "yalyric" do
+            version "${{ steps.release.outputs.version }}"
+            sha256 "${{ steps.release.outputs.sha256 }}"
+
+            url "https://github.com/${{ github.repository }}/releases/download/v#{version}/yalyric-v#{version}-macos.zip"
+            name "yalyric"
+            desc "Yet Another Lyric sync for Spotify on macOS"
+            homepage "https://github.com/${{ github.repository }}"
+
+            depends_on macos: ">= :ventura"
+
+            app "yalyric.app"
+
+            zap trash: [
+              "~/Library/Preferences/com.yalyric.app.plist",
+            ]
+          end
+          RUBY
+
+      - name: Commit and push
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/yalyric.rb
+          git commit -m "Update yalyric to ${{ steps.release.outputs.version }}"
+          git push
