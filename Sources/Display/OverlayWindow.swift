@@ -109,11 +109,13 @@ class OverlayWindow: NSWindow {
             label.font = theme.currentLineFont
             label.textColor = theme.textColor
             label.shadow = shadow
+            label.layer?.setAffineTransform(.identity)
+            // Apply or clear letter spacing
+            let str = NSMutableAttributedString(string: label.stringValue)
             if theme.letterSpacing != 0 {
-                let str = NSMutableAttributedString(string: label.stringValue)
                 str.addAttribute(.kern, value: theme.letterSpacing, range: NSRange(location: 0, length: str.length))
-                label.attributedStringValue = str
             }
+            label.attributedStringValue = str
         }
 
         nextLyricLabel.font = theme.nextLineFont
@@ -170,8 +172,16 @@ class OverlayWindow: NSWindow {
     private func applyPosition(_ theme: Theme) {
         guard theme.overlayPosition != .custom else { return }
         let screen = NSScreen.main ?? NSScreen.screens[0]
-        let newSize = NSSize(width: theme.overlayWidth, height: 90)
-        let origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+        let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
+        let newSize = NSSize(width: width, height: 90)
+        let origin: NSPoint
+        if theme.backgroundStyle == .bar {
+            // Bar spans full screen width at the overlay's vertical position
+            let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+            origin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
+        } else {
+            origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+        }
         setFrame(NSRect(origin: origin, size: newSize), display: true)
     }
 
@@ -235,6 +245,8 @@ class OverlayWindow: NSWindow {
                     activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.95, y: 0.95))
                     incomingLabel.animator().alphaValue = 1
                     incomingLabel.layer?.setAffineTransform(.identity)
+                } completionHandler: {
+                    activeLabel.layer?.setAffineTransform(.identity)
                 }
 
             case .push:

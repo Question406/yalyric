@@ -46,12 +46,37 @@ enum OverlayPosition: String, CaseIterable {
 
 // MARK: - Theme
 
+/// Use a unique sentinel to distinguish "never saved" from "saved as 0"
+private let themeSavedKey = "theme.saved"
+
 struct Theme: Equatable {
+    // NSColor equality is unreliable across color spaces, so we compare descriptions
+    static func == (lhs: Theme, rhs: Theme) -> Bool {
+        lhs.fontName == rhs.fontName
+            && lhs.currentLineFontSize == rhs.currentLineFontSize
+            && lhs.nextLineFontSize == rhs.nextLineFontSize
+            && lhs.fontWeight == rhs.fontWeight
+            && lhs.letterSpacing == rhs.letterSpacing
+            && lhs.textColor.description == rhs.textColor.description
+            && lhs.nextLineOpacity == rhs.nextLineOpacity
+            && lhs.shadowColor.description == rhs.shadowColor.description
+            && lhs.shadowBlurRadius == rhs.shadowBlurRadius
+            && lhs.shadowOffsetX == rhs.shadowOffsetX
+            && lhs.shadowOffsetY == rhs.shadowOffsetY
+            && lhs.backgroundStyle == rhs.backgroundStyle
+            && lhs.backgroundColor.description == rhs.backgroundColor.description
+            && lhs.backgroundCornerRadius == rhs.backgroundCornerRadius
+            && lhs.transitionStyle == rhs.transitionStyle
+            && lhs.animationDuration == rhs.animationDuration
+            && lhs.overlayPosition == rhs.overlayPosition
+            && lhs.overlayWidth == rhs.overlayWidth
+    }
+
     // Typography
-    var fontName: String = ""  // empty = system font
+    var fontName: String = ""
     var currentLineFontSize: CGFloat = 24
     var nextLineFontSize: CGFloat = 16
-    var fontWeight: NSFont.Weight = .bold
+    var fontWeight: CGFloat = NSFont.Weight.bold.rawValue  // store as CGFloat for persistence
     var letterSpacing: CGFloat = 0
 
     // Colors
@@ -59,7 +84,8 @@ struct Theme: Equatable {
     var nextLineOpacity: CGFloat = 0.5
     var shadowColor: NSColor = NSColor.black.withAlphaComponent(0.8)
     var shadowBlurRadius: CGFloat = 4
-    var shadowOffset: NSSize = NSSize(width: 0, height: -1)
+    var shadowOffsetX: CGFloat = 0
+    var shadowOffsetY: CGFloat = -1
 
     // Background
     var backgroundStyle: BackgroundStyle = .none
@@ -75,12 +101,16 @@ struct Theme: Equatable {
     var overlayWidth: CGFloat = 800
 
     // Computed
+    var resolvedFontWeight: NSFont.Weight {
+        NSFont.Weight(rawValue: fontWeight)
+    }
+
     var currentLineFont: NSFont {
         if fontName.isEmpty {
-            return NSFont.systemFont(ofSize: currentLineFontSize, weight: fontWeight)
+            return NSFont.systemFont(ofSize: currentLineFontSize, weight: resolvedFontWeight)
         }
         return NSFont(name: fontName, size: currentLineFontSize)
-            ?? NSFont.systemFont(ofSize: currentLineFontSize, weight: fontWeight)
+            ?? NSFont.systemFont(ofSize: currentLineFontSize, weight: resolvedFontWeight)
     }
 
     var nextLineFont: NSFont {
@@ -95,24 +125,8 @@ struct Theme: Equatable {
         let s = NSShadow()
         s.shadowColor = shadowColor
         s.shadowBlurRadius = shadowBlurRadius
-        s.shadowOffset = shadowOffset
+        s.shadowOffset = NSSize(width: shadowOffsetX, height: shadowOffsetY)
         return s
-    }
-
-    static func == (lhs: Theme, rhs: Theme) -> Bool {
-        lhs.fontName == rhs.fontName
-            && lhs.currentLineFontSize == rhs.currentLineFontSize
-            && lhs.nextLineFontSize == rhs.nextLineFontSize
-            && lhs.letterSpacing == rhs.letterSpacing
-            && lhs.textColor == rhs.textColor
-            && lhs.nextLineOpacity == rhs.nextLineOpacity
-            && lhs.backgroundStyle == rhs.backgroundStyle
-            && lhs.backgroundCornerRadius == rhs.backgroundCornerRadius
-            && lhs.transitionStyle == rhs.transitionStyle
-            && lhs.animationDuration == rhs.animationDuration
-            && lhs.overlayPosition == rhs.overlayPosition
-            && lhs.overlayWidth == rhs.overlayWidth
-            && lhs.shadowBlurRadius == rhs.shadowBlurRadius
     }
 }
 
@@ -122,8 +136,14 @@ class ThemeManager: ObservableObject {
     static let shared = ThemeManager()
 
     @Published var theme: Theme {
-        didSet { save() }
+        didSet {
+            guard !isLoading else { return }
+            scheduleSave()
+        }
     }
+
+    private var isLoading = false
+    private var saveTimer: Timer?
 
     // Built-in presets
     static let presets: [(name: String, theme: Theme)] = [
@@ -141,7 +161,7 @@ class ThemeManager: ObservableObject {
             var t = Theme()
             t.currentLineFontSize = 16
             t.nextLineFontSize = 12
-            t.fontWeight = .regular
+            t.fontWeight = NSFont.Weight.regular.rawValue
             t.textColor = NSColor.white.withAlphaComponent(0.7)
             t.nextLineOpacity = 0.3
             t.overlayPosition = .bottomLeft
@@ -169,7 +189,7 @@ class ThemeManager: ObservableObject {
             t.fontName = "SF Mono"
             t.currentLineFontSize = 18
             t.nextLineFontSize = 14
-            t.fontWeight = .regular
+            t.fontWeight = NSFont.Weight.regular.rawValue
             t.textColor = NSColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)
             t.transitionStyle = .none
             t.backgroundStyle = .pill
@@ -184,11 +204,21 @@ class ThemeManager: ObservableObject {
         load()
     }
 
+    /// Debounce saves — wait 0.3s after last change before writing to disk
+    private func scheduleSave() {
+        saveTimer?.invalidate()
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { [weak self] _ in
+            self?.save()
+        }
+    }
+
     private func save() {
         let d = UserDefaults.standard
+        d.set(true, forKey: themeSavedKey)
         d.set(theme.fontName, forKey: "theme.fontName")
         d.set(Double(theme.currentLineFontSize), forKey: "theme.currentLineFontSize")
         d.set(Double(theme.nextLineFontSize), forKey: "theme.nextLineFontSize")
+        d.set(Double(theme.fontWeight), forKey: "theme.fontWeight")
         d.set(Double(theme.letterSpacing), forKey: "theme.letterSpacing")
         d.set(theme.transitionStyle.rawValue, forKey: "theme.transitionStyle")
         d.set(theme.backgroundStyle.rawValue, forKey: "theme.backgroundStyle")
@@ -198,8 +228,9 @@ class ThemeManager: ObservableObject {
         d.set(Double(theme.overlayWidth), forKey: "theme.overlayWidth")
         d.set(Double(theme.nextLineOpacity), forKey: "theme.nextLineOpacity")
         d.set(Double(theme.shadowBlurRadius), forKey: "theme.shadowBlurRadius")
+        d.set(Double(theme.shadowOffsetX), forKey: "theme.shadowOffsetX")
+        d.set(Double(theme.shadowOffsetY), forKey: "theme.shadowOffsetY")
 
-        // Archive colors
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: theme.textColor, requiringSecureCoding: true) {
             d.set(data, forKey: "theme.textColor")
         }
@@ -213,46 +244,54 @@ class ThemeManager: ObservableObject {
 
     private func load() {
         let d = UserDefaults.standard
+        guard d.bool(forKey: themeSavedKey) else { return }
 
-        if let name = d.string(forKey: "theme.fontName") { theme.fontName = name }
+        isLoading = true
+        defer { isLoading = false }
+
+        var t = Theme()
+
+        if let name = d.string(forKey: "theme.fontName") { t.fontName = name }
         let cSize = d.double(forKey: "theme.currentLineFontSize")
-        if cSize > 0 { theme.currentLineFontSize = CGFloat(cSize) }
+        if cSize > 0 { t.currentLineFontSize = CGFloat(cSize) }
         let nSize = d.double(forKey: "theme.nextLineFontSize")
-        if nSize > 0 { theme.nextLineFontSize = CGFloat(nSize) }
-        let ls = d.double(forKey: "theme.letterSpacing")
-        if ls != 0 { theme.letterSpacing = CGFloat(ls) }
+        if nSize > 0 { t.nextLineFontSize = CGFloat(nSize) }
+        t.fontWeight = CGFloat(d.double(forKey: "theme.fontWeight"))
+        t.letterSpacing = CGFloat(d.double(forKey: "theme.letterSpacing"))
+        t.shadowBlurRadius = CGFloat(d.double(forKey: "theme.shadowBlurRadius"))
+        t.shadowOffsetX = CGFloat(d.double(forKey: "theme.shadowOffsetX"))
+        t.shadowOffsetY = CGFloat(d.double(forKey: "theme.shadowOffsetY"))
 
         if let raw = d.string(forKey: "theme.transitionStyle"),
-           let v = TransitionStyle(rawValue: raw) { theme.transitionStyle = v }
+           let v = TransitionStyle(rawValue: raw) { t.transitionStyle = v }
         if let raw = d.string(forKey: "theme.backgroundStyle"),
-           let v = BackgroundStyle(rawValue: raw) { theme.backgroundStyle = v }
+           let v = BackgroundStyle(rawValue: raw) { t.backgroundStyle = v }
 
         let cr = d.double(forKey: "theme.backgroundCornerRadius")
-        if cr > 0 { theme.backgroundCornerRadius = CGFloat(cr) }
+        if cr > 0 { t.backgroundCornerRadius = CGFloat(cr) }
         let dur = d.double(forKey: "theme.animationDuration")
-        if dur > 0 { theme.animationDuration = dur }
+        if dur > 0 { t.animationDuration = dur }
         if let raw = d.string(forKey: "theme.overlayPosition"),
-           let v = OverlayPosition(rawValue: raw) { theme.overlayPosition = v }
+           let v = OverlayPosition(rawValue: raw) { t.overlayPosition = v }
         let ow = d.double(forKey: "theme.overlayWidth")
-        if ow > 0 { theme.overlayWidth = CGFloat(ow) }
+        if ow > 0 { t.overlayWidth = CGFloat(ow) }
         let nlo = d.double(forKey: "theme.nextLineOpacity")
-        if nlo > 0 { theme.nextLineOpacity = CGFloat(nlo) }
-        let sbr = d.double(forKey: "theme.shadowBlurRadius")
-        if sbr > 0 { theme.shadowBlurRadius = CGFloat(sbr) }
+        if nlo > 0 { t.nextLineOpacity = CGFloat(nlo) }
 
-        // Unarchive colors
         if let data = d.data(forKey: "theme.textColor"),
            let color = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
-            theme.textColor = color
+            t.textColor = color
         }
         if let data = d.data(forKey: "theme.backgroundColor"),
            let color = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
-            theme.backgroundColor = color
+            t.backgroundColor = color
         }
         if let data = d.data(forKey: "theme.shadowColor"),
            let color = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSColor.self, from: data) {
-            theme.shadowColor = color
+            t.shadowColor = color
         }
+
+        theme = t  // single assignment, triggers didSet but isLoading blocks save
     }
 
     func applyPreset(_ name: String) {

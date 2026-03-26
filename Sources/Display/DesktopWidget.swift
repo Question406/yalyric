@@ -86,7 +86,7 @@ class DesktopWidget: NSWindow {
                 label.textColor = theme.textColor
             } else {
                 label.font = theme.nextLineFont
-                label.textColor = theme.textColor.withAlphaComponent(0.4)
+                label.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
             }
         }
     }
@@ -105,7 +105,7 @@ class DesktopWidget: NSWindow {
                 lineLabels[i].textColor = theme.textColor
             } else {
                 lineLabels[i].font = theme.nextLineFont
-                lineLabels[i].textColor = theme.textColor.withAlphaComponent(0.4)
+                lineLabels[i].textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
             }
         }
     }

@@ -269,6 +269,7 @@ struct AppearanceTab: View {
         .formStyle(.grouped)
         .onAppear { syncColorsFromTheme() }
         .onChange(of: themeManager.theme) { _ in
+            syncColorsFromTheme()
             NotificationCenter.default.post(name: .displayModesChanged, object: nil)
         }
     }
@@ -355,26 +356,6 @@ struct LabeledSlider: View {
             Slider(value: $value, in: range)
                 .frame(width: 180)
             Text(String(format: format, value * displayMultiplier))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .trailing)
-        }
-    }
-}
-
-struct LabeledSlider_Duration: View {
-    let label: String
-    @Binding var value: TimeInterval
-    let range: ClosedRange<Double>
-    let format: String
-
-    var body: some View {
-        HStack {
-            Text(label)
-            Spacer()
-            Slider(value: $value, in: range)
-                .frame(width: 180)
-            Text(String(format: format, value))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 44, alignment: .trailing)
