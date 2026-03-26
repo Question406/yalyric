@@ -28,6 +28,10 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(lyricsLanguage.rawValue, forKey: "lyricsLanguage") }
     }
 
+    @Published var providerOrder: [String] {
+        didSet { UserDefaults.standard.set(providerOrder, forKey: "providerOrder") }
+    }
+
     @Published var autoHideOnPause: Bool {
         didSet { UserDefaults.standard.set(autoHideOnPause, forKey: "autoHideOnPause") }
     }
@@ -35,6 +39,8 @@ class SettingsManager: ObservableObject {
     @Published var autoHideDelay: TimeInterval {
         didSet { UserDefaults.standard.set(autoHideDelay, forKey: "autoHideDelay") }
     }
+
+    static let defaultProviderOrder = ["lrclib", "spotify", "musixmatch", "netease"]
 
     private init() {
         if let saved = UserDefaults.standard.stringArray(forKey: "enabledDisplayModes") {
@@ -50,6 +56,12 @@ class SettingsManager: ObservableObject {
             lyricsLanguage = lang
         } else {
             lyricsLanguage = .auto
+        }
+
+        if let saved = UserDefaults.standard.stringArray(forKey: "providerOrder"), !saved.isEmpty {
+            providerOrder = saved
+        } else {
+            providerOrder = Self.defaultProviderOrder
         }
 
         autoHideOnPause = UserDefaults.standard.object(forKey: "autoHideOnPause") as? Bool ?? true
@@ -282,51 +294,56 @@ struct AppearanceTab: View {
 
 // MARK: - Sources Tab
 
+struct ProviderInfo {
+    let id: String
+    let name: String
+    let detail: String
+
+    static let all: [String: ProviderInfo] = [
+        "lrclib": ProviderInfo(id: "lrclib", name: "LRCLIB", detail: "Free, no auth"),
+        "spotify": ProviderInfo(id: "spotify", name: "Spotify Internal", detail: "Requires SP_DC cookie"),
+        "musixmatch": ProviderInfo(id: "musixmatch", name: "Musixmatch", detail: "Auto-token"),
+        "netease": ProviderInfo(id: "netease", name: "NetEase Cloud Music", detail: "Good for CJK"),
+    ]
+}
+
 struct SourcesTab: View {
     @ObservedObject var settings: SettingsManager
 
     var body: some View {
         Form {
-            Section("Lyrics Providers") {
-                Text("Providers are tried in order. The first to return synced lyrics wins.")
+            Section {
+                Text("Drag to reorder. Providers are tried top-to-bottom; the first to return synced lyrics wins.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                HStack {
-                    Image(systemName: "1.circle.fill")
-                    Text("LRCLIB")
-                    Spacer()
-                    Text("Free, no auth")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                List {
+                    ForEach(settings.providerOrder, id: \.self) { id in
+                        if let info = ProviderInfo.all[id] {
+                            HStack {
+                                Image(systemName: "line.3.horizontal")
+                                    .foregroundStyle(.tertiary)
+                                Text(info.name)
+                                Spacer()
+                                Text(info.detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                    .onMove { from, to in
+                        settings.providerOrder.move(fromOffsets: from, toOffset: to)
+                    }
                 }
+                .frame(height: 140)
 
-                HStack {
-                    Image(systemName: "2.circle.fill")
-                    Text("Spotify Internal")
-                    Spacer()
-                    Text("Requires SP_DC cookie")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Button("Reset to Default Order") {
+                    settings.providerOrder = SettingsManager.defaultProviderOrder
                 }
-
-                HStack {
-                    Image(systemName: "3.circle.fill")
-                    Text("Musixmatch")
-                    Spacer()
-                    Text("Auto-token")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack {
-                    Image(systemName: "4.circle.fill")
-                    Text("NetEase Cloud Music")
-                    Spacer()
-                    Text("Good for CJK")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                .controlSize(.small)
+            } header: {
+                Text("Lyrics Providers")
             }
 
             Section("Spotify SP_DC Cookie") {

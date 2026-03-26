@@ -7,19 +7,21 @@ public class LyricsManager: ObservableObject {
     @Published var isFetching: Bool = false
     @Published var errorMessage: String?
 
-    private var providers: [LyricsProvider] = [
-        LRCLIBProvider(),
-        SpotifyInternalProvider(),
-        MusixmatchProvider(),
-        NetEaseProvider()
+    private let allProviders: [String: LyricsProvider] = [
+        "lrclib": LRCLIBProvider(),
+        "spotify": SpotifyInternalProvider(),
+        "musixmatch": MusixmatchProvider(),
+        "netease": NetEaseProvider()
     ]
+
+    private var orderedProviders: [LyricsProvider] {
+        let order = UserDefaults.standard.stringArray(forKey: "providerOrder")
+            ?? ["lrclib", "spotify", "musixmatch", "netease"]
+        return order.compactMap { allProviders[$0] }
+    }
     private var cache: [String: Lyrics] = [:]
     private var currentFetchTask: Task<Void, Never>?
     private var currentTrackID: String?
-
-    func addProvider(_ provider: LyricsProvider) {
-        providers.append(provider)
-    }
 
     func fetchLyrics(for track: TrackInfo) {
         let trackID = track.id
@@ -44,7 +46,7 @@ public class LyricsManager: ObservableObject {
             var bestLyrics: Lyrics?
             var fallbackLyrics: Lyrics?  // wrong language but still usable
 
-            for provider in providers {
+            for provider in orderedProviders {
                 if Task.isCancelled { return }
                 do {
                     if let lyrics = try await provider.fetch(track: track) {
