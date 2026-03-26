@@ -13,7 +13,8 @@ enum TransitionStyle: String, CaseIterable {
 
 enum BackgroundStyle: String, CaseIterable {
     case none = "None (Transparent)"
-    case pill = "Rounded Pill"
+    case frostedPill = "Frosted Glass Pill"
+    case solidPill = "Solid Pill"
     case bar = "Full-Width Bar"
 }
 
@@ -153,7 +154,7 @@ class ThemeManager: ObservableObject {
             t.textColor = NSColor(red: 0.4, green: 1.0, blue: 0.8, alpha: 1.0)
             t.shadowColor = NSColor(red: 0.0, green: 1.0, blue: 0.6, alpha: 0.6)
             t.shadowBlurRadius = 12
-            t.backgroundStyle = .pill
+            t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor.black.withAlphaComponent(0.35)
             return t
         }()),
@@ -179,7 +180,7 @@ class ThemeManager: ObservableObject {
         ("Spotify", {
             var t = Theme()
             t.textColor = NSColor(red: 0.12, green: 0.84, blue: 0.38, alpha: 1.0)
-            t.backgroundStyle = .pill
+            t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 0.5)
             t.backgroundCornerRadius = 8
             return t
@@ -192,7 +193,7 @@ class ThemeManager: ObservableObject {
             t.fontWeight = NSFont.Weight.regular.rawValue
             t.textColor = NSColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)
             t.transitionStyle = .none
-            t.backgroundStyle = .pill
+            t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor.black.withAlphaComponent(0.45)
             t.letterSpacing = 1
             return t

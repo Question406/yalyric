@@ -216,19 +216,19 @@ struct AppearanceTab: View {
                         Text(style.rawValue).tag(style)
                     }
                 }
-                if themeManager.theme.backgroundStyle != .none {
+                if themeManager.theme.backgroundStyle == .solidPill {
                     ColorPicker("Background color", selection: $bgColorSwiftUI, supportsOpacity: true)
                         .onChange(of: bgColorSwiftUI) { newValue in
                             themeManager.theme.backgroundColor = NSColor(newValue)
                         }
-                    if themeManager.theme.backgroundStyle == .pill {
-                        LabeledSlider(
-                            label: "Corner radius",
-                            value: $themeManager.theme.backgroundCornerRadius,
-                            range: 0...24,
-                            format: "%.0f"
-                        )
-                    }
+                }
+                if themeManager.theme.backgroundStyle == .frostedPill || themeManager.theme.backgroundStyle == .solidPill {
+                    LabeledSlider(
+                        label: "Corner radius",
+                        value: $themeManager.theme.backgroundCornerRadius,
+                        range: 0...24,
+                        format: "%.0f"
+                    )
                 }
             }
 

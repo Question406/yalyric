@@ -127,7 +127,6 @@ class OverlayWindow: NSWindow {
     }
 
     private func applyBackground(_ theme: Theme) {
-        // Remove existing background
         backgroundView?.removeFromSuperview()
         backgroundView = nil
         backgroundLayer?.removeFromSuperlayer()
@@ -136,7 +135,28 @@ class OverlayWindow: NSWindow {
         switch theme.backgroundStyle {
         case .none:
             break
-        case .pill:
+
+        case .frostedPill:
+            // Native macOS frosted glass using NSVisualEffectView
+            let effect = NSVisualEffectView(frame: container.bounds)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.wantsLayer = true
+            effect.layer?.cornerRadius = theme.backgroundCornerRadius
+            effect.layer?.masksToBounds = true
+            effect.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            NSLayoutConstraint.activate([
+                effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                effect.topAnchor.constraint(equalTo: container.topAnchor),
+                effect.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            backgroundView = effect
+
+        case .solidPill:
+            // Simple semi-transparent solid color
             let bg = NSView(frame: container.bounds)
             bg.wantsLayer = true
             bg.layer?.backgroundColor = theme.backgroundColor.cgColor
@@ -149,23 +169,23 @@ class OverlayWindow: NSWindow {
                 bg.topAnchor.constraint(equalTo: container.topAnchor),
                 bg.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             ])
-            let layer = bg.layer!
-            backgroundLayer = layer
-        case .bar:
-            let screen = NSScreen.main ?? NSScreen.screens[0]
-            let barWidth = screen.frame.width
-            let bg = NSView(frame: NSRect(x: 0, y: 0, width: barWidth, height: 90))
-            bg.wantsLayer = true
-            bg.layer?.backgroundColor = theme.backgroundColor.cgColor
-            bg.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(bg, positioned: .below, relativeTo: currentLabelA)
-            NSLayoutConstraint.activate([
-                bg.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                bg.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                bg.topAnchor.constraint(equalTo: container.topAnchor),
-                bg.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            ])
             backgroundLayer = bg.layer
+
+        case .bar:
+            // Full-width frosted bar
+            let effect = NSVisualEffectView(frame: container.bounds)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            NSLayoutConstraint.activate([
+                effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                effect.topAnchor.constraint(equalTo: container.topAnchor),
+                effect.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            backgroundView = effect
         }
     }
 
