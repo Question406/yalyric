@@ -8,6 +8,9 @@ public class SyncEngine: ObservableObject {
     @Published public var nextLine: String = ""
     @Published public var progress: Double = 0  // 0-1 within current line
 
+    /// Manual offset in seconds. Positive = lyrics appear earlier, negative = later.
+    public var offset: TimeInterval = 0
+
     private var lyrics: Lyrics?
 
     public init() {}
@@ -29,6 +32,8 @@ public class SyncEngine: ObservableObject {
     }
 
     public func update(position: TimeInterval) {
+        let adjustedPosition = position + offset
+
         guard let lyrics = lyrics, !lyrics.lines.isEmpty else {
             currentLineIndex = -1
             currentLine = ""
@@ -47,7 +52,7 @@ public class SyncEngine: ObservableObject {
             return
         }
 
-        guard let index = lyrics.currentLineIndex(at: position) else {
+        guard let index = lyrics.currentLineIndex(at: adjustedPosition) else {
             // Before first lyric line
             currentLineIndex = -1
             currentLine = ""
@@ -67,7 +72,7 @@ public class SyncEngine: ObservableObject {
         let lineEnd = (index + 1 < lyrics.lines.count) ? lyrics.lines[index + 1].time : lyrics.lines[index].time + 5.0
         let lineDuration = lineEnd - lineStart
         if lineDuration > 0 {
-            progress = min(1.0, max(0.0, (position - lineStart) / lineDuration))
+            progress = min(1.0, max(0.0, (adjustedPosition - lineStart) / lineDuration))
         }
     }
 }

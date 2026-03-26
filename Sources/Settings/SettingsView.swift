@@ -40,6 +40,10 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(autoHideDelay, forKey: "autoHideDelay") }
     }
 
+    @Published var lyricsOffset: TimeInterval {
+        didSet { UserDefaults.standard.set(lyricsOffset, forKey: "lyricsOffset") }
+    }
+
     static let defaultProviderOrder = ["lrclib", "spotify", "musixmatch", "netease"]
 
     private init() {
@@ -67,6 +71,7 @@ class SettingsManager: ObservableObject {
         autoHideOnPause = UserDefaults.standard.object(forKey: "autoHideOnPause") as? Bool ?? true
         let savedDelay = UserDefaults.standard.double(forKey: "autoHideDelay")
         autoHideDelay = savedDelay > 0 ? savedDelay : 3.0
+        lyricsOffset = UserDefaults.standard.double(forKey: "lyricsOffset")
     }
 }
 
@@ -125,6 +130,26 @@ struct GeneralTab: View {
                         .frame(width: 140)
                     }
                 }
+            }
+
+            Section("Lyrics Timing") {
+                HStack {
+                    Text("Offset")
+                    Spacer()
+                    Button("-0.5s") { settings.lyricsOffset -= 0.5 }
+                        .controlSize(.small)
+                    Text(String(format: "%+.1fs", settings.lyricsOffset))
+                        .frame(width: 50)
+                        .multilineTextAlignment(.center)
+                        .font(.system(.body, design: .monospaced))
+                    Button("+0.5s") { settings.lyricsOffset += 0.5 }
+                        .controlSize(.small)
+                    Button("Reset") { settings.lyricsOffset = 0 }
+                        .controlSize(.small)
+                }
+                Text("Positive = lyrics appear earlier, negative = later")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Lyrics Language") {
@@ -275,8 +300,18 @@ struct AppearanceTab: View {
 
             Section("Position") {
                 Picker("Overlay position", selection: $themeManager.theme.overlayPosition) {
-                    ForEach(OverlayPosition.allCases, id: \.rawValue) { pos in
+                    ForEach(OverlayPosition.allCases.filter { $0 != .custom }, id: \.rawValue) { pos in
                         Text(pos.rawValue).tag(pos)
+                    }
+                    if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
+                        Text("Custom").tag(OverlayPosition.custom)
+                    }
+                }
+                .onChange(of: themeManager.theme.overlayPosition) { newValue in
+                    if newValue != .custom {
+                        UserDefaults.standard.removeObject(forKey: "overlay.hasCustomPosition")
+                        UserDefaults.standard.removeObject(forKey: "overlay.customCenterX")
+                        UserDefaults.standard.removeObject(forKey: "overlay.customY")
                     }
                 }
                 LabeledSlider(

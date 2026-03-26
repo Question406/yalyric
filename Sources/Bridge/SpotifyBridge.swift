@@ -6,6 +6,7 @@ class SpotifyBridge: ObservableObject {
     @Published var currentTrack: TrackInfo?
     @Published var isPlaying: Bool = false
     @Published var playbackPosition: TimeInterval = 0
+    @Published var permissionDenied: Bool = false
 
     private var pollTimer: Timer?
     private let activeInterval: TimeInterval = 0.5
@@ -86,11 +87,26 @@ class SpotifyBridge: ObservableObject {
         // NSAppleScript is not thread-safe — but we only call from our serial queue
         var error: NSDictionary?
         let result = script.executeAndReturnError(&error)
-        if error != nil { return "error" }
+        if let error = error {
+            // Error -1743 = "Not authorized to send Apple events"
+            let errorNum = error[NSAppleScript.errorNumber] as? Int
+            if errorNum == -1743 {
+                return "permission_denied"
+            }
+            return "error"
+        }
         return result.stringValue ?? ""
     }
 
     private func handleResult(_ output: String) {
+        if output == "permission_denied" {
+            permissionDenied = true
+            currentTrack = nil
+            isPlaying = false
+            return
+        }
+        permissionDenied = false
+
         if output == "not_running" || output == "stopped" || output == "error" {
             currentTrack = nil
             isPlaying = false

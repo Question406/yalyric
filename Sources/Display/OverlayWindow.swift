@@ -22,13 +22,23 @@ class OverlayWindow: NSWindow {
     private var cancellables = Set<AnyCancellable>()
     private var isAnimating = false
     private var isMouseInside = false
-    private var mouseMonitor: Any?
+    private(set) var isEditMode = false
+    private var editBorderLayer: CAShapeLayer?
 
     init() {
         let theme = ThemeManager.shared.theme
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let size = NSSize(width: theme.overlayWidth, height: 90)
-        let origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
+
+        // Use saved custom position if available, otherwise use preset
+        let origin: NSPoint
+        if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
+            let centerX = CGFloat(UserDefaults.standard.double(forKey: "overlay.customCenterX"))
+            let y = CGFloat(UserDefaults.standard.double(forKey: "overlay.customY"))
+            origin = NSPoint(x: centerX - size.width / 2, y: y)
+        } else {
+            origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
+        }
 
         super.init(
             contentRect: NSRect(origin: origin, size: size),
@@ -52,29 +62,71 @@ class OverlayWindow: NSWindow {
     }
 
     private func setupMouseTracking() {
-        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
-            self?.checkMousePosition()
+        // Use a lightweight timer to check mouse position
+        // Global event monitors can crash with animator() proxies
+        Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                self.checkMousePosition()
+            }
         }
     }
 
     private func checkMousePosition() {
+        guard isVisible else { return }
         let mouseLocation = NSEvent.mouseLocation  // screen coordinates
         let inside = frame.contains(mouseLocation)
 
         guard inside != isMouseInside else { return }
         isMouseInside = inside
 
+        // Direct alpha change — safer than animator() from timer context
+        let targetAlpha: CGFloat = inside ? 1 : 0
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.2
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            sourceLabel.animator().alphaValue = inside ? 1 : 0
+            ctx.allowsImplicitAnimation = true
+            self.sourceLabel.alphaValue = targetAlpha
         }
     }
 
-    deinit {
-        if let monitor = mouseMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
+    // MARK: - Edit Mode (toggle from menu bar)
+
+    func toggleEditMode() {
+        if isEditMode { lockPosition() } else { unlockPosition() }
+    }
+
+    private func unlockPosition() {
+        isEditMode = true
+        ignoresMouseEvents = false
+        isMovableByWindowBackground = true
+
+        // Show dashed border
+        let border = CAShapeLayer()
+        border.strokeColor = NSColor.white.withAlphaComponent(0.6).cgColor
+        border.fillColor = nil
+        border.lineDashPattern = [6, 4]
+        border.lineWidth = 2
+        border.path = CGPath(roundedRect: container.bounds.insetBy(dx: 1, dy: 1),
+                             cornerWidth: 8, cornerHeight: 8, transform: nil)
+        container.layer?.addSublayer(border)
+        editBorderLayer = border
+    }
+
+    func lockPosition() {
+        guard isEditMode else { return }
+
+        // Save center X (not origin) so dynamic width doesn't shift position on reload
+        UserDefaults.standard.set(true, forKey: "overlay.hasCustomPosition")
+        UserDefaults.standard.set(frame.midX, forKey: "overlay.customCenterX")
+        UserDefaults.standard.set(frame.origin.y, forKey: "overlay.customY")
+
+        isEditMode = false
+        ignoresMouseEvents = true
+        isMovableByWindowBackground = false
+
+        editBorderLayer?.removeFromSuperlayer()
+        editBorderLayer = nil
     }
 
     private func observeTheme() {
@@ -232,10 +284,21 @@ class OverlayWindow: NSWindow {
     }
 
     private func applyPosition(_ theme: Theme) {
-        guard theme.overlayPosition != .custom else { return }
+        if isEditMode { return }
+
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
         let newSize = NSSize(width: width, height: 90)
+
+        // Check for user-saved custom position (stored independently from theme)
+        if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
+            let centerX = CGFloat(UserDefaults.standard.double(forKey: "overlay.customCenterX"))
+            let y = CGFloat(UserDefaults.standard.double(forKey: "overlay.customY"))
+            let x = centerX - newSize.width / 2
+            setFrame(NSRect(origin: NSPoint(x: x, y: y), size: newSize), display: true)
+            return
+        }
+
         let origin: NSPoint
         if theme.backgroundStyle == .bar {
             let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
@@ -476,7 +539,4 @@ class OverlayWindow: NSWindow {
         updateLyrics(current: title, next: artist)
     }
 
-    func setDraggable(_ draggable: Bool) {
-        ignoresMouseEvents = !draggable
-    }
 }

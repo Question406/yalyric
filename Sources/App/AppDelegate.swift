@@ -2,7 +2,7 @@ import AppKit
 import Combine
 
 @MainActor
-public class AppDelegate: NSObject, NSApplicationDelegate {
+public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let spotifyBridge = SpotifyBridge()
     private let lyricsManager = LyricsManager()
     private let syncEngine = SyncEngine()
@@ -15,9 +15,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var lastDisplayedLineIndex: Int = -2  // -2 = never displayed
     private var lastDisplayState: DisplayState = .noTrack
+    private var autoHideTimer: Timer?
+    private var isOverlayHidden = false
+    private var hasShownOnboarding = false
+    private var hasEverPlayed = false
 
     private enum DisplayState: Equatable {
-        case noTrack, loading, noLyrics, intro, lyrics
+        case noTrack, permissionDenied, loading, noLyrics, intro, lyrics
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -26,6 +30,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupDisplayModes()
         setupBindings()
+        showOnboardingIfNeeded()
+        syncEngine.offset = SettingsManager.shared.lyricsOffset
         spotifyBridge.startPolling()
 
         NotificationCenter.default.addObserver(
@@ -65,6 +71,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupMenuBarMenu() {
         let menu = NSMenu()
+        menu.delegate = self
+
+        let moveItem = NSMenuItem(title: "Move Overlay...", action: #selector(toggleOverlayEditMode), keyEquivalent: "m")
+        moveItem.target = self
+        menu.addItem(moveItem)
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -76,6 +87,17 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         menuBarController?.statusItem.menu = menu
+    }
+
+    @objc private func toggleOverlayEditMode() {
+        overlayWindow?.toggleEditMode()
+    }
+
+    public func menuNeedsUpdate(_ menu: NSMenu) {
+        if let moveItem = menu.items.first(where: { $0.action == #selector(toggleOverlayEditMode) }) {
+            let editing = overlayWindow?.isEditMode ?? false
+            moveItem.title = editing ? "Lock Overlay Position" : "Move Overlay..."
+        }
     }
 
     @objc private func openSettings() {
@@ -105,6 +127,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.lastDisplayedLineIndex = -2
                 self.lastDisplayState = .noTrack
+                self.hasShownOnboarding = false
                 self.lyricsManager.fetchLyrics(for: track)
             }
             .store(in: &cancellables)
@@ -126,14 +149,89 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
 
-        // React to playing state
+        // Sync offset from settings
+        SettingsManager.shared.$lyricsOffset
+            .sink { [weak self] offset in
+                self?.syncEngine.offset = offset
+                self?.lastDisplayedLineIndex = -2  // force redraw
+            }
+            .store(in: &cancellables)
+
+        // React to playing state — auto-hide overlay when paused
         spotifyBridge.$isPlaying
+            .dropFirst()  // skip initial false at launch
+            .removeDuplicates()
             .sink { [weak self] playing in
-                if !playing {
-                    self?.menuBarController?.updateCurrentLine("")
+                guard let self else { return }
+                if playing {
+                    self.hasEverPlayed = true
+                    self.cancelAutoHide()
+                    self.showOverlay()
+                } else if self.hasEverPlayed {
+                    // Only auto-hide if we've confirmed playback before
+                    // (avoids hiding on transient AppleScript errors)
+                    self.menuBarController?.updateCurrentLine("")
+                    self.scheduleAutoHide()
                 }
             }
             .store(in: &cancellables)
+    }
+
+    // MARK: - Onboarding
+
+    private func showOnboardingIfNeeded() {
+        let key = "hasLaunchedBefore"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        hasShownOnboarding = true
+        overlayWindow?.showTrackInfo(
+            title: "yalyric is running",
+            artist: "Play a song in Spotify to see lyrics"
+        )
+    }
+
+    // MARK: - Auto-hide
+
+    private func scheduleAutoHide() {
+        autoHideTimer?.invalidate()
+        let settings = SettingsManager.shared
+        guard settings.autoHideOnPause else { return }
+
+        let delay = settings.autoHideDelay
+        if delay <= 0 {
+            hideOverlay()
+            return
+        }
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.hideOverlay()
+            }
+        }
+    }
+
+    private func cancelAutoHide() {
+        autoHideTimer?.invalidate()
+        autoHideTimer = nil
+    }
+
+    private func hideOverlay() {
+        guard !isOverlayHidden else { return }
+        isOverlayHidden = true
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.overlayWindow?.animator().alphaValue = 0
+        }
+    }
+
+    private func showOverlay() {
+        guard isOverlayHidden else { return }
+        isOverlayHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            self.overlayWindow?.animator().alphaValue = 1
+        }
     }
 
     private func updateAllDisplays() {
@@ -145,7 +243,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Determine current display state
         let state: DisplayState
-        if track == nil {
+        if spotifyBridge.permissionDenied {
+            state = .permissionDenied
+        } else if track == nil {
             state = .noTrack
         } else if lyricsManager.isFetching {
             state = .loading
@@ -163,6 +263,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastDisplayState = state
         lastDisplayedLineIndex = index
+
+        if spotifyBridge.permissionDenied {
+            overlayWindow?.updateSource(nil)
+            overlayWindow?.showTrackInfo(
+                title: "Automation permission needed",
+                artist: "System Settings → Privacy → Automation → enable Spotify for yalyric"
+            )
+            menuBarController?.updateCurrentLine("Permission needed")
+            return
+        }
 
         if track == nil {
             // No track playing
