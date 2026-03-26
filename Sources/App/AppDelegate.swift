@@ -328,14 +328,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Normal lyrics display
-        overlayWindow?.updateSource(lyricsManager.currentLyrics?.source)
+        let isSynced = lyricsManager.currentLyrics?.isSynced ?? false
+        overlayWindow?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
+        menuBarController?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
         overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
         overlayWindow?.updateProgress(syncEngine.progress)
         menuBarController?.updateProgress(syncEngine.progress)
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
 
         if spotifyBridge.isPlaying {
-            menuBarController?.updateCurrentLine(currentLine)
+            menuBarController?.updateCurrentLine(currentLine, isSynced: isSynced)
         }
         menuBarController?.updateLyrics(lines: lines, currentIndex: index)
     }

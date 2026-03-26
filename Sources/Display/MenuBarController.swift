@@ -9,6 +9,15 @@ class MenuBarController: NSObject {
     private var allLines: [LyricLine] = []
     private var currentIndex: Int = -1
     private var currentProgress: Double = 0
+    private var lyricsSource: LyricsSource?
+    private var lyricsSynced: Bool = false
+    private var userScrolling = false
+    private var scrollResumeTimer: Timer?
+    private var lastAutoScrollIndex: Int = -1
+    private var displayProgress: Double = 0  // smoothly interpolated
+    private var progressRate: Double = 0     // progress per second
+    private var lastProgressUpdate: Date = Date()
+    private var interpolationTimer: Timer?
 
     private static let fallbackIcon = "♪ yalyric"
 
@@ -54,6 +63,11 @@ class MenuBarController: NSObject {
         if let popover = popover, popover.isShown {
             popover.performClose(nil)
             self.popover = nil
+            stopInterpolation()
+            scrollResumeTimer?.invalidate()
+            scrollResumeTimer = nil
+            userScrolling = false
+            NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
         } else {
             showPopover()
         }
@@ -90,19 +104,43 @@ class MenuBarController: NSObject {
         }
 
         self.popover = popover
+        userScrolling = false
+        lastAutoScrollIndex = -1
         refreshTextView()
+        startInterpolationIfNeeded()
+
+        // Detect user scrolling
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(userDidScroll),
+            name: NSScrollView.willStartLiveScrollNotification, object: scrollView
+        )
     }
 
-    func updateCurrentLine(_ text: String) {
+    @objc private func userDidScroll() {
+        userScrolling = true
+        scrollResumeTimer?.invalidate()
+        scrollResumeTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+            self?.userScrolling = false
+        }
+    }
+
+    func updateCurrentLine(_ text: String, isSynced: Bool? = nil) {
         guard let button = statusItem.button else { return }
 
         if text.isEmpty {
             Self.applyIcon(to: button)
         } else {
             button.image = nil
-            let truncated = text.count > 40 ? String(text.prefix(37)) + "..." : text
-            button.title = truncated
+            let prefix = isSynced == true ? "♪ " : isSynced == false ? "📄 " : ""
+            let maxLen = 40 - prefix.count
+            let truncated = text.count > maxLen ? String(text.prefix(maxLen - 3)) + "..." : text
+            button.title = prefix + truncated
         }
+    }
+
+    func updateSource(_ source: LyricsSource?, isSynced: Bool) {
+        self.lyricsSource = source
+        self.lyricsSynced = isSynced
     }
 
     func updateLyrics(lines: [LyricLine], currentIndex: Int) {
@@ -114,14 +152,67 @@ class MenuBarController: NSObject {
     }
 
     func updateProgress(_ progress: Double) {
-        self.currentProgress = progress
-        if popover?.isShown == true && ThemeManager.shared.theme.karaokeFillEnabled {
-            refreshTextView()
+        let now = Date()
+        let dt = now.timeIntervalSince(lastProgressUpdate)
+
+        // Compute progress rate (progress units per second)
+        if dt > 0.1 && dt < 2.0 {
+            progressRate = (progress - currentProgress) / dt
         }
+
+        currentProgress = progress
+        displayProgress = progress
+        lastProgressUpdate = now
+
+        startInterpolationIfNeeded()
+    }
+
+    private func startInterpolationIfNeeded() {
+        guard popover?.isShown == true,
+              ThemeManager.shared.theme.karaokeFillEnabled,
+              interpolationTimer == nil else { return }
+
+        // 30fps interpolation while popover is open
+        interpolationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            guard self.popover?.isShown == true else {
+                self.stopInterpolation()
+                return
+            }
+
+            let dt = Date().timeIntervalSince(self.lastProgressUpdate)
+            self.displayProgress = min(1.0, self.currentProgress + self.progressRate * dt)
+            self.refreshTextView()
+        }
+    }
+
+    private func stopInterpolation() {
+        interpolationTimer?.invalidate()
+        interpolationTimer = nil
     }
 
     private func refreshTextView() {
         let attributed = NSMutableAttributedString()
+
+        // Header: line count · synced/plain · source
+        if !allLines.isEmpty, let source = lyricsSource {
+            let providerName: String
+            switch source {
+            case .lrclib: providerName = "LRCLIB"
+            case .spotify: providerName = "Spotify"
+            case .musixmatch: providerName = "Musixmatch"
+            case .netease: providerName = "NetEase"
+            case .plain: providerName = "plain"
+            }
+            let syncLabel = lyricsSynced ? "synced" : "plain text"
+            let header = "\(allLines.count) lines · \(syncLabel) · \(providerName)\n\n"
+            let headerAttrs: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.tertiaryLabelColor,
+            ]
+            attributed.append(NSAttributedString(string: header, attributes: headerAttrs))
+        }
+
         let normalAttrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 14),
             .foregroundColor: NSColor.secondaryLabelColor,
@@ -143,7 +234,7 @@ class MenuBarController: NSObject {
         for (i, line) in allLines.enumerated() {
             if i == currentIndex && karaokeFill && !line.text.isEmpty {
                 // Karaoke fill: bright portion up to progress, dim for the rest
-                let fillIndex = max(0, min(line.text.count, Int(Double(line.text.count) * currentProgress)))
+                let fillIndex = max(0, min(line.text.count, Int(Double(line.text.count) * displayProgress)))
                 let brightPart = String(line.text.prefix(fillIndex))
                 let dimPart = String(line.text.dropFirst(fillIndex))
 
@@ -162,13 +253,18 @@ class MenuBarController: NSObject {
 
         textView.textStorage?.setAttributedString(attributed)
 
-        // Auto-scroll to current line
-        if currentIndex >= 0 && currentIndex < allLines.count {
+        // Auto-scroll to current line (skip if user is manually scrolling)
+        if !userScrolling && currentIndex >= 0 && currentIndex < allLines.count && currentIndex != lastAutoScrollIndex {
+            lastAutoScrollIndex = currentIndex
             let lineHeight: CGFloat = 24
             let y = CGFloat(currentIndex) * lineHeight
             let visibleHeight = scrollView.contentView.bounds.height
             let scrollY = max(0, y - visibleHeight / 2)
-            textView.scroll(NSPoint(x: 0, y: scrollY))
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.3
+                ctx.allowsImplicitAnimation = true
+                self.scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollY))
+            }
         }
     }
 }

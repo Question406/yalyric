@@ -628,15 +628,21 @@ class OverlayWindow: NSWindow {
         }
     }
 
-    func updateSource(_ source: LyricsSource?) {
-        let text: String
+    func updateSource(_ source: LyricsSource?, isSynced: Bool = false) {
+        let provider: String
         switch source {
-        case .lrclib: text = "via LRCLIB"
-        case .spotify: text = "via Spotify"
-        case .musixmatch: text = "via Musixmatch"
-        case .netease: text = "via NetEase"
-        case .plain: text = "plain text"
-        case nil: text = ""
+        case .lrclib: provider = "LRCLIB"
+        case .spotify: provider = "Spotify"
+        case .musixmatch: provider = "Musixmatch"
+        case .netease: provider = "NetEase"
+        case .plain: provider = ""
+        case nil: provider = ""
+        }
+        let text: String
+        if provider.isEmpty {
+            text = source == .plain ? "plain text" : ""
+        } else {
+            text = "via \(provider) · \(isSynced ? "synced" : "plain")"
         }
         if sourceLabel.stringValue != text {
             sourceLabel.stringValue = text
