@@ -95,7 +95,7 @@ struct Theme: Equatable {
 
     // Animation
     var transitionStyle: TransitionStyle = .slideUp
-    var animationDuration: TimeInterval = 0.3
+    var animationDuration: TimeInterval = 0.5
 
     // Layout
     var overlayPosition: OverlayPosition = .bottomCenter

@@ -291,14 +291,14 @@ class OverlayWindow: NSWindow {
                 }
 
             case .scaleFade:
-                // Use CATransaction for layer transform animation
+                // Old line shrinks away, new line grows in from slightly larger
                 incomingLabel.alphaValue = 0
                 incomingTop.constant = restY
                 activeTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
 
-                // Set initial scale for incoming
-                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.92, y: 0.92))
+                // Incoming starts bigger than normal
+                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.15, y: 1.15))
 
                 isAnimating = true
                 CATransaction.begin()
@@ -309,9 +309,9 @@ class OverlayWindow: NSWindow {
                     self?.isAnimating = false
                 }
 
-                // Animate outgoing: scale down + fade
-                activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.92, y: 0.92))
-                // Animate incoming: scale up + fade in
+                // Outgoing: shrink to 0.75 (noticeably smaller)
+                activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.75, y: 0.75))
+                // Incoming: settle to normal size
                 incomingLabel.layer?.setAffineTransform(.identity)
 
                 CATransaction.commit()
