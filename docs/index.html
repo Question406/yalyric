@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yalyric — Real-time Spotify Lyrics on macOS</title>
+    <meta name="description" content="A native macOS app that syncs Spotify lyrics to your desktop. Lightweight, no Electron, no web views.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Helvetica Neue', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
+        .glow { box-shadow: 0 0 60px rgba(99,102,241,0.15), 0 0 120px rgba(99,102,241,0.05); }
+        .gradient-text { background: linear-gradient(135deg, #818cf8, #c084fc, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        body { background: #0a0a0f; }
+    </style>
+</head>
+<body class="text-white antialiased">
+
+    <!-- Hero -->
+    <section class="min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
+        <!-- Subtle gradient orbs -->
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl"></div>
+
+        <div class="relative z-10">
+            <div class="text-6xl mb-4">&#9834;</div>
+            <h1 class="text-5xl sm:text-7xl font-bold tracking-tight mb-4">
+                ya<span class="gradient-text">lyric</span>
+            </h1>
+            <p class="text-xl sm:text-2xl text-gray-400 max-w-2xl mb-8">
+                Real-time Spotify lyrics on your macOS desktop.
+                <br class="hidden sm:block">
+                Native, lightweight, beautiful.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+                <a href="https://github.com/Question406/yalyric/releases" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold transition-colors">
+                    Download
+                </a>
+                <a href="https://github.com/Question406/yalyric" class="px-8 py-3 glass rounded-xl font-semibold hover:bg-white/10 transition-colors">
+                    View on GitHub
+                </a>
+            </div>
+
+            <p class="text-sm text-gray-500">macOS 13+ &middot; Swift &middot; Apache 2.0</p>
+        </div>
+
+        <!-- TODO: Replace with actual screenshot -->
+        <div class="relative z-10 mt-12 glass rounded-2xl glow p-1 max-w-3xl w-full">
+            <div class="bg-gray-900/80 rounded-xl p-8 text-center">
+                <p class="text-gray-500 text-sm mb-4">Screenshot coming soon</p>
+                <div class="space-y-3 max-w-md mx-auto">
+                    <div class="text-2xl font-bold text-white/90">And I don't want the world to see me</div>
+                    <div class="text-lg text-white/40">'Cause I don't think that they'd understand</div>
+                    <div class="text-xs text-white/20 text-right mt-4">via LRCLIB &middot; synced</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="max-w-6xl mx-auto px-6 py-24">
+        <h2 class="text-3xl sm:text-4xl font-bold text-center mb-16">
+            Everything you need. <span class="text-gray-500">Nothing you don't.</span>
+        </h2>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#127916;</div>
+                <h3 class="font-semibold text-lg mb-2">Three Display Modes</h3>
+                <p class="text-gray-400 text-sm">Floating overlay, desktop widget, or menu bar. Enable any combination.</p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#127925;</div>
+                <h3 class="font-semibold text-lg mb-2">Four Lyrics Sources</h3>
+                <p class="text-gray-400 text-sm">LRCLIB, Spotify, Musixmatch, and NetEase queried in parallel. Best result wins.</p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#10024;</div>
+                <h3 class="font-semibold text-lg mb-2">Karaoke Fill</h3>
+                <p class="text-gray-400 text-sm">Gradient sweep across the current line in sync with the music. Like Apple Music.</p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#127912;</div>
+                <h3 class="font-semibold text-lg mb-2">Six Theme Presets</h3>
+                <p class="text-gray-400 text-sm">Classic, Neon, Minimal, Karaoke, Spotify, Terminal. Plus full customization.</p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#9889;</div>
+                <h3 class="font-semibold text-lg mb-2">Native &amp; Fast</h3>
+                <p class="text-gray-400 text-sm">Pure Swift/AppKit. ~65MB RAM. No Electron, no web views, no bloat.</p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-2xl mb-3">&#127760;</div>
+                <h3 class="font-semibold text-lg mb-2">Language Aware</h3>
+                <p class="text-gray-400 text-sm">Auto-detects song language. Filters mismatched lyrics. Great for CJK music.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Install -->
+    <section class="max-w-3xl mx-auto px-6 py-24">
+        <h2 class="text-3xl sm:text-4xl font-bold text-center mb-12">Get Started</h2>
+
+        <div class="glass rounded-2xl p-8 space-y-6">
+            <div>
+                <h3 class="font-semibold text-lg mb-2">Homebrew</h3>
+                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
+                    <span class="text-gray-500">$</span> brew tap Question406/tap<br>
+                    <span class="text-gray-500">$</span> brew install --cask yalyric
+                </div>
+            </div>
+
+            <div class="border-t border-white/10 pt-6">
+                <h3 class="font-semibold text-lg mb-2">Manual Download</h3>
+                <p class="text-gray-400 text-sm mb-3">
+                    Download from <a href="https://github.com/Question406/yalyric/releases" class="text-indigo-400 hover:text-indigo-300">GitHub Releases</a>,
+                    unzip, drag to Applications, then:
+                </p>
+                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
+                    <span class="text-gray-500">$</span> xattr -cr /Applications/yalyric.app
+                </div>
+                <p class="text-gray-500 text-xs mt-2">Removes macOS quarantine flag for unsigned apps.</p>
+            </div>
+
+            <div class="border-t border-white/10 pt-6">
+                <h3 class="font-semibold text-lg mb-2">Build from Source</h3>
+                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
+                    <span class="text-gray-500">$</span> git clone https://github.com/Question406/yalyric.git<br>
+                    <span class="text-gray-500">$</span> cd yalyric && swift build && .build/debug/yalyric
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="max-w-4xl mx-auto px-6 py-24 text-center">
+        <h2 class="text-3xl sm:text-4xl font-bold mb-12">How It Works</h2>
+
+        <div class="flex flex-col sm:flex-row gap-8 justify-center">
+            <div class="flex-1">
+                <div class="text-4xl mb-3">1</div>
+                <p class="text-gray-400">Launch yalyric. A music note appears in your menu bar.</p>
+            </div>
+            <div class="flex-1">
+                <div class="text-4xl mb-3">2</div>
+                <p class="text-gray-400">Play a song in Spotify. Lyrics appear automatically.</p>
+            </div>
+            <div class="flex-1">
+                <div class="text-4xl mb-3">3</div>
+                <p class="text-gray-400">Customize themes, transitions, and display modes in Settings.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5 py-12 text-center text-sm text-gray-500">
+        <p>
+            Built with Swift &amp; AppKit by
+            <a href="https://github.com/Question406" class="text-gray-400 hover:text-white">Question406</a>
+        </p>
+        <p class="mt-2">
+            <a href="https://github.com/Question406/yalyric" class="text-gray-400 hover:text-white">GitHub</a>
+            &middot;
+            <a href="https://github.com/Question406/yalyric/releases" class="text-gray-400 hover:text-white">Releases</a>
+            &middot;
+            <a href="https://github.com/Question406/yalyric/blob/main/LICENSE" class="text-gray-400 hover:text-white">Apache 2.0</a>
+        </p>
+        <p class="mt-4 text-gray-600 text-xs max-w-md mx-auto">
+            All lyrics are the property of their respective owners. yalyric fetches lyrics from third-party APIs for personal use only.
+        </p>
+    </footer>
+
+</body>
+</html>
