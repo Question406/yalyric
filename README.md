@@ -1,171 +1,159 @@
-# yalyric
+<p align="center">
+  <h1 align="center">yalyric</h1>
+  <p align="center"><b>Yet Another Lyric</b> — real-time Spotify lyrics on your macOS desktop</p>
+</p>
 
-**Yet Another Lyric** sync for Spotify on macOS.
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-13%2B-blue" alt="macOS 13+">
+  <img src="https://img.shields.io/badge/Swift-5.9%2B-orange" alt="Swift 5.9+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="License"></a>
+  <a href="https://github.com/Question406/yalyric/actions"><img src="https://img.shields.io/github/actions/workflow/status/Question406/yalyric/ci.yml?branch=main&label=CI" alt="CI"></a>
+  <a href="https://github.com/Question406/yalyric/releases"><img src="https://img.shields.io/github/v/release/Question406/yalyric?label=release" alt="Release"></a>
+</p>
 
-A native macOS menu bar app that displays synced lyrics for the currently playing Spotify track. Built with Swift and AppKit — no Electron, no web views, no bloat.
+<!-- TODO: Add a GIF showing lyrics syncing across display modes -->
 
-![macOS 13+](https://img.shields.io/badge/macOS-13%2B-blue)
-![Swift 5.9+](https://img.shields.io/badge/Swift-5.9%2B-orange)
-![License](https://img.shields.io/badge/License-Apache%202.0-green)
-
-## Why?
-
-[LyricsX](https://github.com/ddddxxx/LyricsX) was the gold standard for macOS lyrics — but it's been [abandoned since 2024](https://github.com/ddddxxx/LyricsX/issues/640), broken on macOS Sonoma/Sequoia, and its lyrics sources are mostly dead. [SpotifyLyrics](https://github.com/SimonIT/spotifylyrics) hasn't been updated since 2021 and relies on fragile web scraping.
-
-yalyric fills the gap with a fresh native app, modern lyrics APIs, and support for current macOS versions.
+A native macOS app that syncs Spotify lyrics to your desktop. Lightweight, no Electron, no web views. Inspired by [LyricsX](https://github.com/ddddxxx/LyricsX).
 
 ## Features
 
-### Three Display Modes
-
-| Mode | Description |
-|---|---|
-| **Floating Overlay** | Always-on-top transparent window with current + next line. Click-through — doesn't interfere with your work. |
-| **Desktop Widget** | Sits on the wallpaper layer showing 5 lines with the current line highlighted. Blurred background card. |
-| **Menu Bar** | Shows the current lyric in the menu bar. Click to open a popover with full scrolling lyrics. |
-
-All modes can be enabled/disabled independently from Settings.
-
-### Four Lyrics Sources
-
-Providers are tried in waterfall order — the first one to return synced lyrics wins:
-
-| Source | Auth Required | Notes |
-|---|---|---|
-| [LRCLIB](https://lrclib.net) | None | Free, open API. Great coverage for English/Western music. |
-| Spotify Internal | SP_DC cookie | Returns the exact lyrics Spotify shows natively (via Musixmatch). Best match quality. |
-| Musixmatch | Auto-token | Large synced subtitle database. Token is generated automatically. |
-| NetEase Cloud Music | None | Excellent for CJK (Chinese/Japanese/Korean) music. |
-
-### Other Highlights
-
-- **Native Swift/AppKit** — lightweight, ~65MB RAM, no Electron
-- **0.5s polling** — accurate lyric sync via AppleScript
-- **Binary search** sync engine — O(log n) timestamp matching
-- **In-memory cache** — lyrics are fetched once per track
-- **LRC format support** — standard `[MM:SS.xx]` timed lyrics
-- **Plain lyrics fallback** — shows unsynced lyrics when no timed version is available
-- **No dock icon** — lives entirely in the menu bar
-
-## Requirements
-
-- macOS 13 (Ventura) or later
-- Spotify desktop app (not the web player)
-- Swift 5.9+ / Xcode Command Line Tools
+- **Three display modes** — floating overlay, desktop widget, and menu bar, all independently togglable
+- **Four lyrics sources** — LRCLIB, Spotify Internal, Musixmatch, NetEase Cloud Music, queried in parallel
+- **Karaoke fill effect** — gradient sweep across the current line in sync with the music
+- **Six theme presets** — Classic, Neon, Minimal, Karaoke, Spotify, Terminal, plus full customization
+- **Five transition styles** — slide up, crossfade, scale fade, push, or none
+- **Draggable positioning** — move the overlay and widget anywhere on screen
+- **Auto-hide** — overlay fades out when Spotify is paused
+- **Language filtering** — auto-detects song language, filters mismatched lyrics
+- **Manual offset** — adjust lyrics timing with +/- buttons
+- **Disk cache** — instant lyrics on songs you've played before
+- **Smart matching** — validates search results by name/artist/duration to prevent wrong-song lyrics
+- **Podcast/DJ filtering** — hides lyrics UI for non-music content, shows title in menu bar
+- **Native Swift/AppKit** — ~65MB RAM, no dock icon, lives in the menu bar
 
 ## Installation
 
-### Download (easiest)
+### Homebrew (recommended)
 
-1. Download `yalyric-vX.X.X-macos.zip` from [GitHub Releases](https://github.com/yourname/yalyric/releases)
+```bash
+brew tap Question406/tap
+brew install --cask yalyric
+```
+
+### Download
+
+1. Download `yalyric.zip` from [Releases](https://github.com/Question406/yalyric/releases)
 2. Unzip and drag `yalyric.app` to `/Applications`
 3. Remove the quarantine flag (required for unsigned apps):
    ```bash
    xattr -cr /Applications/yalyric.app
    ```
-4. Double-click to launch
-
-> **Why step 3?** macOS quarantines apps downloaded from the internet. Without code signing, the app shows *"yalyric is damaged"* — it's not actually damaged, just unsigned. The `xattr -cr` command removes the quarantine flag.
 
 ### Build from Source
 
 ```bash
-git clone https://github.com/yourname/yalyric.git
+git clone https://github.com/Question406/yalyric.git
 cd yalyric
-
-# Build .app bundle
-./scripts/bundle.sh
-# Output: dist/yalyric.app
-
-# Or run directly during development
 swift build && .build/debug/yalyric
 ```
 
-The app appears as a ♪ icon in the menu bar. Play a song in Spotify and lyrics will appear.
-
-## Configuration
-
-Click the menu bar icon to access **Settings**.
-
-### Display Modes
-
-Toggle any combination of the three display modes. Default: Floating Overlay + Menu Bar.
-
-### Spotify Internal Lyrics (Optional)
-
-To use Spotify's own lyrics API (best quality):
-
-1. Open [open.spotify.com](https://open.spotify.com) in your browser
-2. Log in to your Spotify account
-3. Open DevTools (F12) → Application → Cookies
-4. Copy the value of the `sp_dc` cookie
-5. Paste it into yalyric Settings → SP_DC Cookie field
-
-This is optional — LRCLIB works without any configuration.
-
-### Font Size
-
-Adjustable from 12pt to 48pt via the slider in Settings.
-
-## Architecture
-
+Or build the .app bundle:
+```bash
+./scripts/bundle.sh
+# Output: dist/yalyric.app
 ```
-yalyric/
-├── Package.swift
-├── Executable/
-│   └── main.swift                     # Entry point
-├── Sources/
-│   ├── App/
-│   │   └── AppDelegate.swift          # App lifecycle, wires everything together
-│   ├── Bridge/
-│   │   └── SpotifyBridge.swift        # AppleScript polling for track info
-│   ├── Lyrics/
-│   │   ├── LRCParser.swift            # LRC format parser + data models
-│   │   ├── LyricsManager.swift        # Orchestrates providers in waterfall
-│   │   └── Providers/
-│   │       ├── LyricsProvider.swift    # Protocol
-│   │       ├── LRCLIBProvider.swift    # lrclib.net API
-│   │       ├── SpotifyInternalProvider.swift
-│   │       ├── MusixmatchProvider.swift
-│   │       └── NetEaseProvider.swift
-│   ├── Sync/
-│   │   └── SyncEngine.swift           # Binary search timestamp matching
-│   ├── Display/
-│   │   ├── OverlayWindow.swift        # Floating transparent overlay
-│   │   ├── DesktopWidget.swift        # Wallpaper-layer widget
-│   │   └── MenuBarController.swift    # Menu bar + popover
-│   ├── Settings/
-│   │   └── SettingsView.swift         # Preferences window
-│   └── Models/
-│       └── TrackInfo.swift            # Track metadata model
-└── Tests/
-    ├── LRCParserTests.swift           # 16 tests
-    ├── LyricsModelTests.swift         # 8 tests
-    ├── TrackInfoTests.swift           # 4 tests
-    └── SyncEngineTests.swift          # 18 tests
-```
+
+## Quick Start
+
+1. Launch yalyric — a **music note icon** appears in your menu bar
+2. Play a song in Spotify — lyrics appear automatically
+3. **Left-click** the menu bar icon to see the full lyrics popover
+4. **Right-click** for Settings, Move Overlay, and Quit
+5. First launch shows a welcome message; subsequent launches go straight to lyrics
+
+## Display Modes
+
+| Mode | Description |
+|---|---|
+| **Floating Overlay** | Always-on-top transparent window with current + next line. Click-through. Dynamic width. Draggable via right-click menu. |
+| **Desktop Widget** | Sits on the wallpaper layer showing 3-9 lines (configurable) with the current line highlighted. Frosted glass background. |
+| **Menu Bar** | Shows the current lyric line in the menu bar. Left-click opens a popover with full scrolling lyrics and karaoke fill. |
+
+## Lyrics Sources
+
+All four providers are queried in parallel. The best result wins based on scoring (synced > unsynced, language match, line count):
+
+| Source | Auth | Best For |
+|---|---|---|
+| [LRCLIB](https://lrclib.net) | None | English/Western music. Free, open API. |
+| Spotify Internal | SP_DC cookie | Exact match with Spotify's own lyrics. |
+| Musixmatch | Auto-token | Large synced subtitle database. |
+| NetEase Cloud Music | None | CJK (Chinese/Japanese/Korean) music. |
+
+Provider order is configurable via drag-to-reorder in Settings.
+
+### Spotify Internal Setup (optional)
+
+For the highest quality lyrics match:
+
+1. Open [open.spotify.com](https://open.spotify.com) in your browser and log in
+2. Open DevTools (F12) → Application → Cookies
+3. Copy the `sp_dc` cookie value
+4. Paste it into yalyric Settings → Sources → SP_DC Cookie
+
+LRCLIB works without any configuration.
+
+## Settings
+
+Three tabs: **General**, **Appearance**, and **Sources**.
+
+**General** — Display modes, auto-hide behavior, lyrics timing offset, widget line count, language preference
+
+**Appearance** — Theme presets, font/size/spacing, text color, shadow, background style/opacity/radius, transition style/duration, karaoke fill toggle + edge softness, overlay position/width
+
+**Sources** — Drag-to-reorder provider priority, SP_DC cookie, duration tolerance
+
+## FAQ
+
+**Does it work with Apple Music?**
+Not yet. Currently Spotify-only via AppleScript. Apple Music support is planned.
+
+**Why does it say "yalyric is damaged"?**
+macOS quarantines unsigned apps. Run `xattr -cr /Applications/yalyric.app` to fix it. This is safe — the app is open source and you can verify the code.
+
+**Why no lyrics for some songs?**
+Some songs don't have synced lyrics in any database. You'll see "No lyrics available" with the track name. You can also check the log at `~/Library/Logs/yalyric.log` for details on which providers were tried.
+
+**Does the desktop widget use WidgetKit?**
+No. WidgetKit doesn't support real-time updates (it's limited to timeline-based refreshes). The widget is a native `NSWindow` at the desktop level — the same approach used by LyricsX and similar apps.
+
+**Does it work in DJ mode?**
+Yes. Lyrics sync to whatever track is currently playing. DJ transition interludes and podcasts are automatically filtered out.
+
+## System Requirements
+
+- macOS 13 (Ventura) or later
+- Spotify desktop app (not the web player)
 
 ## Testing
 
 ```bash
-swift test \
-  -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks \
-  -Xlinker -rpath -Xlinker /Library/Developer/CommandLineTools/Library/Developer/Frameworks
+swift test
 ```
 
-46 tests across 4 suites covering LRC parsing, binary search sync, track info, and the sync engine.
+63 tests across 5 suites covering LRC parsing, lyrics scoring, sync engine, offset, theme equality, and gradient calculations.
 
-If you have Xcode installed, `swift test` works without the extra flags.
+## Contributing
 
-## How It Works
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and guidelines.
 
-1. **SpotifyBridge** polls the Spotify desktop app every 0.5 seconds via AppleScript to get the current track name, artist, album, Spotify ID, playback position, and play/pause state.
+Check the [roadmap](docs/plans/roadmap.md) for planned features, or look for issues labeled `good first issue`.
 
-2. When the track changes, **LyricsManager** queries each lyrics provider in order. The first provider to return synced (timed) lyrics wins. Results are cached in memory by track ID.
-
-3. **SyncEngine** uses binary search on the sorted lyric timestamps to find the current line for the given playback position. It publishes the current line, next line, line index, and intra-line progress.
-
-4. **Display modes** subscribe to the sync engine and update their views — the overlay crossfades text, the widget highlights the current line, etc.
+Some areas that would benefit from help:
+- Apple Music support
+- Keyboard shortcuts
+- Local .lrc file support
+- Album art color extraction
 
 ## Disclaimer
 
