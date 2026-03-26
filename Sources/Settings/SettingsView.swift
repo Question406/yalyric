@@ -48,6 +48,13 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(durationTolerance, forKey: "durationTolerance") }
     }
 
+    @Published var widgetLineCount: Int {
+        didSet {
+            UserDefaults.standard.set(widgetLineCount, forKey: "widgetLineCount")
+            NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+        }
+    }
+
     static let defaultProviderOrder = ["lrclib", "spotify", "musixmatch", "netease"]
 
     private init() {
@@ -78,6 +85,8 @@ class SettingsManager: ObservableObject {
         lyricsOffset = UserDefaults.standard.double(forKey: "lyricsOffset")
         let savedTolerance = UserDefaults.standard.double(forKey: "durationTolerance")
         durationTolerance = savedTolerance > 0 ? savedTolerance : 30.0
+        let savedLines = UserDefaults.standard.integer(forKey: "widgetLineCount")
+        widgetLineCount = savedLines > 0 ? savedLines : 5
     }
 }
 
@@ -135,6 +144,15 @@ struct GeneralTab: View {
                         .labelsHidden()
                         .frame(width: 140)
                     }
+                }
+            }
+
+            Section("Desktop Widget") {
+                Picker("Visible lines", selection: $settings.widgetLineCount) {
+                    Text("3").tag(3)
+                    Text("5").tag(5)
+                    Text("7").tag(7)
+                    Text("9").tag(9)
                 }
             }
 

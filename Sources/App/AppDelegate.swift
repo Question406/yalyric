@@ -60,6 +60,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if modes.contains(.desktop) {
             if desktopWidget == nil { desktopWidget = DesktopWidget() }
+            desktopWidget?.updateLineCount(settings.widgetLineCount)
             desktopWidget?.orderFront(nil)
         } else {
             desktopWidget?.orderOut(nil)
@@ -73,9 +74,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
 
-        let moveItem = NSMenuItem(title: "Move Overlay...", action: #selector(toggleOverlayEditMode), keyEquivalent: "m")
-        moveItem.target = self
-        menu.addItem(moveItem)
+        let moveOverlay = NSMenuItem(title: "Move Overlay...", action: #selector(toggleOverlayEditMode), keyEquivalent: "m")
+        moveOverlay.target = self
+        menu.addItem(moveOverlay)
+
+        let moveWidget = NSMenuItem(title: "Move Widget...", action: #selector(toggleWidgetEditMode), keyEquivalent: "")
+        moveWidget.target = self
+        menu.addItem(moveWidget)
+
+        menu.addItem(NSMenuItem.separator())
 
         let settingsItem = NSMenuItem(title: "Settings...", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
@@ -93,10 +100,20 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlayWindow?.toggleEditMode()
     }
 
+    @objc private func toggleWidgetEditMode() {
+        desktopWidget?.toggleEditMode()
+    }
+
     public func menuNeedsUpdate(_ menu: NSMenu) {
-        if let moveItem = menu.items.first(where: { $0.action == #selector(toggleOverlayEditMode) }) {
+        if let item = menu.items.first(where: { $0.action == #selector(toggleOverlayEditMode) }) {
             let editing = overlayWindow?.isEditMode ?? false
-            moveItem.title = editing ? "Lock Overlay Position" : "Move Overlay..."
+            item.title = editing ? "Lock Overlay Position" : "Move Overlay..."
+            item.isHidden = overlayWindow == nil
+        }
+        if let item = menu.items.first(where: { $0.action == #selector(toggleWidgetEditMode) }) {
+            let editing = desktopWidget?.isEditMode ?? false
+            item.title = editing ? "Lock Widget Position" : "Move Widget..."
+            item.isHidden = desktopWidget == nil
         }
     }
 
@@ -335,6 +352,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlayWindow?.updateProgress(syncEngine.progress)
         menuBarController?.updateProgress(syncEngine.progress)
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
+        desktopWidget?.updateProgress(syncEngine.progress)
 
         if spotifyBridge.isPlaying {
             menuBarController?.updateCurrentLine(currentLine, isSynced: isSynced)
