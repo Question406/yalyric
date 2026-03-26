@@ -17,6 +17,7 @@ class OverlayWindow: NSWindow {
 
     private let slideDistance: CGFloat = 12
     private var cancellables = Set<AnyCancellable>()
+    private var isAnimating = false
 
     init() {
         let theme = ThemeManager.shared.theme
@@ -110,7 +111,6 @@ class OverlayWindow: NSWindow {
             label.textColor = theme.textColor
             label.shadow = shadow
             label.layer?.setAffineTransform(.identity)
-            // Apply or clear letter spacing
             let str = NSMutableAttributedString(string: label.stringValue)
             if theme.letterSpacing != 0 {
                 str.addAttribute(.kern, value: theme.letterSpacing, range: NSRange(location: 0, length: str.length))
@@ -137,7 +137,6 @@ class OverlayWindow: NSWindow {
             break
 
         case .frostedPill:
-            // Native macOS frosted glass using NSVisualEffectView
             let effect = NSVisualEffectView(frame: container.bounds)
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow
@@ -156,7 +155,6 @@ class OverlayWindow: NSWindow {
             backgroundView = effect
 
         case .solidPill:
-            // Simple semi-transparent solid color
             let bg = NSView(frame: container.bounds)
             bg.wantsLayer = true
             bg.layer?.backgroundColor = theme.backgroundColor.cgColor
@@ -172,7 +170,6 @@ class OverlayWindow: NSWindow {
             backgroundLayer = bg.layer
 
         case .bar:
-            // Full-width frosted bar
             let effect = NSVisualEffectView(frame: container.bounds)
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow
@@ -196,7 +193,6 @@ class OverlayWindow: NSWindow {
         let newSize = NSSize(width: width, height: 90)
         let origin: NSPoint
         if theme.backgroundStyle == .bar {
-            // Bar spans full screen width at the overlay's vertical position
             let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
             origin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
         } else {
@@ -205,42 +201,82 @@ class OverlayWindow: NSWindow {
         setFrame(NSRect(origin: origin, size: newSize), display: true)
     }
 
+    // MARK: - Reset labels to clean state
+
+    /// Cancel any in-flight animation and snap labels to a clean state
+    private func resetLabelsToCleanState() {
+        // Remove all animations
+        currentLabelA.layer?.removeAllAnimations()
+        currentLabelB.layer?.removeAllAnimations()
+
+        let restY: CGFloat = 8
+        let activeLabel = useA ? currentLabelA : currentLabelB
+        let hiddenLabel = useA ? currentLabelB : currentLabelA
+        let activeTop = useA ? currentTopA! : currentTopB!
+        let hiddenTop = useA ? currentTopB! : currentTopA!
+
+        // Snap: active visible at rest, hidden invisible at rest
+        activeLabel.alphaValue = 1
+        activeLabel.layer?.setAffineTransform(.identity)
+        activeTop.constant = restY
+
+        hiddenLabel.alphaValue = 0
+        hiddenLabel.layer?.setAffineTransform(.identity)
+        hiddenTop.constant = restY
+
+        contentView?.layoutSubtreeIfNeeded()
+        isAnimating = false
+    }
+
     // MARK: - Lyrics Display
 
     func updateLyrics(current: String, next: String) {
         let theme = ThemeManager.shared.theme
         let activeLabel = useA ? currentLabelA : currentLabelB
-        let incomingLabel = useA ? currentLabelB : currentLabelA
-        let activeTop = useA ? currentTopA! : currentTopB!
-        let incomingTop = useA ? currentTopB! : currentTopA!
-
-        let restY: CGFloat = 8
 
         if activeLabel.stringValue != current {
+            // If a previous animation is still running, snap to clean state first
+            if isAnimating {
+                resetLabelsToCleanState()
+            }
+
+            let incomingLabel = useA ? currentLabelB : currentLabelA
+            let activeTop = useA ? currentTopA! : currentTopB!
+            let incomingTop = useA ? currentTopB! : currentTopA!
+            let restY: CGFloat = 8
+
             incomingLabel.stringValue = current
 
             switch theme.transitionStyle {
             case .none:
                 activeLabel.alphaValue = 0
-                incomingLabel.alphaValue = 1
+                activeLabel.layer?.setAffineTransform(.identity)
                 activeTop.constant = restY
+                incomingLabel.alphaValue = 1
+                incomingLabel.layer?.setAffineTransform(.identity)
                 incomingTop.constant = restY
+                contentView?.layoutSubtreeIfNeeded()
 
             case .crossfade:
                 incomingLabel.alphaValue = 0
                 incomingTop.constant = restY
+                activeTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
+                isAnimating = true
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     activeLabel.animator().alphaValue = 0
                     incomingLabel.animator().alphaValue = 1
+                } completionHandler: { [weak self] in
+                    self?.isAnimating = false
                 }
 
             case .slideUp:
                 incomingLabel.alphaValue = 0
                 incomingTop.constant = restY + slideDistance
                 contentView?.layoutSubtreeIfNeeded()
+                isAnimating = true
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -250,38 +286,61 @@ class OverlayWindow: NSWindow {
                     incomingTop.constant = restY
                     incomingLabel.animator().alphaValue = 1
                     contentView?.layoutSubtreeIfNeeded()
+                } completionHandler: { [weak self] in
+                    self?.isAnimating = false
                 }
 
             case .scaleFade:
+                // Use CATransaction for layer transform animation
                 incomingLabel.alphaValue = 0
-                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.95, y: 0.95))
                 incomingTop.constant = restY
+                activeTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
+
+                // Set initial scale for incoming
+                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.92, y: 0.92))
+
+                isAnimating = true
+                CATransaction.begin()
+                CATransaction.setAnimationDuration(theme.animationDuration)
+                CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
+                CATransaction.setCompletionBlock { [weak self] in
+                    activeLabel.layer?.setAffineTransform(.identity)
+                    self?.isAnimating = false
+                }
+
+                // Animate outgoing: scale down + fade
+                activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.92, y: 0.92))
+                // Animate incoming: scale up + fade in
+                incomingLabel.layer?.setAffineTransform(.identity)
+
+                CATransaction.commit()
+
+                // Animate alpha via NSAnimationContext (works with animator proxy)
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    ctx.allowsImplicitAnimation = true
                     activeLabel.animator().alphaValue = 0
-                    activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.95, y: 0.95))
                     incomingLabel.animator().alphaValue = 1
-                    incomingLabel.layer?.setAffineTransform(.identity)
-                } completionHandler: {
-                    activeLabel.layer?.setAffineTransform(.identity)
                 }
 
             case .push:
-                incomingLabel.alphaValue = 1
+                // Both labels visible, slide simultaneously with fade
+                incomingLabel.alphaValue = 0
                 incomingTop.constant = restY + slideDistance * 2
                 contentView?.layoutSubtreeIfNeeded()
+                isAnimating = true
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     ctx.allowsImplicitAnimation = true
                     activeTop.constant = restY - slideDistance * 2
+                    activeLabel.animator().alphaValue = 0
                     incomingTop.constant = restY
+                    incomingLabel.animator().alphaValue = 1
                     contentView?.layoutSubtreeIfNeeded()
-                } completionHandler: {
-                    activeLabel.alphaValue = 0
+                } completionHandler: { [weak self] in
+                    self?.isAnimating = false
                 }
             }
 
