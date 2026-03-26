@@ -2,11 +2,13 @@ import AppKit
 
 class MenuBarController: NSObject {
     let statusItem: NSStatusItem
+    var contextMenu: NSMenu?  // set by AppDelegate
     private var popover: NSPopover?
     private let scrollView = NSScrollView()
     private let textView = NSTextView()
     private var allLines: [LyricLine] = []
     private var currentIndex: Int = -1
+    private var currentProgress: Double = 0
 
     private static let fallbackIcon = "♪ yalyric"
 
@@ -16,6 +18,25 @@ class MenuBarController: NSObject {
 
         if let button = statusItem.button {
             Self.applyIcon(to: button)
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+    }
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp {
+            // Right-click: show context menu
+            if let menu = contextMenu {
+                statusItem.menu = menu
+                statusItem.button?.performClick(nil)
+                // Remove menu after it closes so left-click works again
+                DispatchQueue.main.async { self.statusItem.menu = nil }
+            }
+        } else {
+            // Left-click: toggle popover
+            togglePopover()
         }
     }
 
@@ -92,6 +113,13 @@ class MenuBarController: NSObject {
         }
     }
 
+    func updateProgress(_ progress: Double) {
+        self.currentProgress = progress
+        if popover?.isShown == true && ThemeManager.shared.theme.karaokeFillEnabled {
+            refreshTextView()
+        }
+    }
+
     private func refreshTextView() {
         let attributed = NSMutableAttributedString()
         let normalAttrs: [NSAttributedString.Key: Any] = [
@@ -109,9 +137,27 @@ class MenuBarController: NSObject {
             .paragraphStyle: normalAttrs[.paragraphStyle]!
         ]
 
+        let karaokeFill = ThemeManager.shared.theme.karaokeFillEnabled
+        let dimColor = NSColor.labelColor.withAlphaComponent(0.35)
+
         for (i, line) in allLines.enumerated() {
-            let attrs = (i == currentIndex) ? highlightAttrs : normalAttrs
-            attributed.append(NSAttributedString(string: line.text + "\n", attributes: attrs))
+            if i == currentIndex && karaokeFill && !line.text.isEmpty {
+                // Karaoke fill: bright portion up to progress, dim for the rest
+                let fillIndex = max(0, min(line.text.count, Int(Double(line.text.count) * currentProgress)))
+                let brightPart = String(line.text.prefix(fillIndex))
+                let dimPart = String(line.text.dropFirst(fillIndex))
+
+                var brightAttrs = highlightAttrs
+                brightAttrs[.foregroundColor] = NSColor.labelColor
+                var dimAttrs = highlightAttrs
+                dimAttrs[.foregroundColor] = dimColor
+
+                attributed.append(NSAttributedString(string: brightPart, attributes: brightAttrs))
+                attributed.append(NSAttributedString(string: dimPart + "\n", attributes: dimAttrs))
+            } else {
+                let attrs = (i == currentIndex) ? highlightAttrs : normalAttrs
+                attributed.append(NSAttributedString(string: line.text + "\n", attributes: attrs))
+            }
         }
 
         textView.textStorage?.setAttributedString(attributed)

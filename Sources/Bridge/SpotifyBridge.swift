@@ -73,11 +73,23 @@ class SpotifyBridge: ObservableObject {
     }
 
     private func poll() {
-        // Run AppleScript on a background queue to avoid blocking the main thread
+        // Run AppleScript on a background queue with timeout protection
+        // If Spotify hangs/crashes, executeScript can block indefinitely
         Self.pollQueue.async { [weak self] in
-            let output = Self.executeScript()
+            var output = "error"
+            let semaphore = DispatchSemaphore(value: 0)
+
+            // Execute on a separate thread so we can timeout
+            DispatchQueue.global(qos: .userInitiated).async {
+                output = Self.executeScript()
+                semaphore.signal()
+            }
+
+            let result = semaphore.wait(timeout: .now() + 3.0)
+            let finalOutput = result == .timedOut ? "error" : output
+
             DispatchQueue.main.async {
-                self?.handleResult(output)
+                self?.handleResult(finalOutput)
             }
         }
     }

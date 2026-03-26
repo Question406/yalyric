@@ -83,7 +83,7 @@ public struct MusixmatchProvider: LyricsProvider {
                 track: track
             )
             if score < SearchMatchScore.minimumScore {
-                print("[musixmatch] Rejected: matched '\(matchTrack["track_name"] ?? "")' by '\(matchTrack["artist_name"] ?? "")' (score \(score))")
+                YalyricLog.info("[musixmatch] Rejected: matched '\(matchTrack["track_name"] ?? "")' by '\(matchTrack["artist_name"] ?? "")' (score \(score))")
                 return nil
             }
         }

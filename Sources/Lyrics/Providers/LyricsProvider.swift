@@ -67,7 +67,7 @@ struct SearchMatchScore {
         }
 
         if score < minimumScore {
-            print("[yalyric]     Match rejected: '\(resultName ?? "?")' by '\(resultArtist ?? "?")' "
+            YalyricLog.info("[yalyric]     Match rejected: '\(resultName ?? "?")' by '\(resultArtist ?? "?")' "
                 + "(name: \(nameMatch), artist: \(artistMatch), dur diff: \(String(format: "%.1fs", durationDiff)), score: \(score))")
         }
 

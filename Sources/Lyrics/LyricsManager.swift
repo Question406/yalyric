@@ -130,11 +130,11 @@ public class LyricsManager: ObservableObject {
         let trackID = track.id
         currentTrackID = trackID
 
-        print("[yalyric] Fetching lyrics for: \(track.name) — \(track.artist) (duration: \(String(format: "%.1fs", track.duration)), id: \(track.spotifyID))")
+        YalyricLog.info("[yalyric] Fetching lyrics for: \(track.name) — \(track.artist) (duration: \(String(format: "%.1fs", track.duration)), id: \(track.spotifyID))")
 
         // Check memory cache
         if let cached = memoryCacheGet(trackID) {
-            print("[yalyric] ✓ Memory cache hit (\(cached.source.rawValue), \(cached.lines.count) lines)")
+            YalyricLog.info("[yalyric] ✓ Memory cache hit (\(cached.source.rawValue), \(cached.lines.count) lines)")
             currentLyrics = cached
             errorMessage = nil
             return
@@ -142,7 +142,7 @@ public class LyricsManager: ObservableObject {
 
         // Check disk cache
         if let cached = loadFromDisk(trackID) {
-            print("[yalyric] ✓ Disk cache hit (\(cached.source.rawValue), \(cached.lines.count) lines)")
+            YalyricLog.info("[yalyric] ✓ Disk cache hit (\(cached.source.rawValue), \(cached.lines.count) lines)")
             memoryCacheSet(trackID, cached)
             currentLyrics = cached
             errorMessage = nil
@@ -157,7 +157,7 @@ public class LyricsManager: ObservableObject {
         let langPref = UserDefaults.standard.string(forKey: "lyricsLanguage")
             .flatMap { LyricsLanguagePreference(rawValue: $0) } ?? .auto
         let providers = orderedProviders
-        print("[yalyric] Querying \(providers.count) providers in parallel...")
+        YalyricLog.info("[yalyric] Querying \(providers.count) providers in parallel...")
 
         currentFetchTask = Task {
             // Query all providers concurrently
@@ -169,13 +169,13 @@ public class LyricsManager: ObservableObject {
                         do {
                             let lyrics = try await provider.fetch(track: track)
                             if let lyrics {
-                                print("[yalyric]   [\(provider.source.rawValue)] → \(lyrics.lines.count) lines, synced: \(lyrics.isSynced)")
+                                YalyricLog.info("[yalyric]   [\(provider.source.rawValue)] → \(lyrics.lines.count) lines, synced: \(lyrics.isSynced)")
                             } else {
-                                print("[yalyric]   [\(provider.source.rawValue)] → no result")
+                                YalyricLog.info("[yalyric]   [\(provider.source.rawValue)] → no result")
                             }
                             return (index, lyrics)
                         } catch {
-                            print("[yalyric]   [\(provider.source.rawValue)] → error: \(error.localizedDescription)")
+                            YalyricLog.info("[yalyric]   [\(provider.source.rawValue)] → error: \(error.localizedDescription)")
                             return (index, nil)
                         }
                     }
@@ -189,7 +189,7 @@ public class LyricsManager: ObservableObject {
                     // Early return on perfect match — no need to wait for slower providers
                     let score = Self.scoreLyrics(lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist)
                     if score >= Self.maxScore {
-                        print("[yalyric]   Perfect score (\(score)) from \(lyrics.source.rawValue), cancelling others")
+                        YalyricLog.info("[yalyric]   Perfect score (\(score)) from \(lyrics.source.rawValue), cancelling others")
                         group.cancelAll()
                         break
                     }
@@ -198,11 +198,11 @@ public class LyricsManager: ObservableObject {
             }
 
             if Task.isCancelled {
-                print("[yalyric] Fetch cancelled (task)")
+                YalyricLog.info("[yalyric] Fetch cancelled (task)")
                 return
             }
             guard currentTrackID == trackID else {
-                print("[yalyric] Fetch discarded (track changed)")
+                YalyricLog.info("[yalyric] Fetch discarded (track changed)")
                 return
             }
 
@@ -215,7 +215,7 @@ public class LyricsManager: ObservableObject {
             }
 
             if !scored.isEmpty {
-                print("[yalyric] Results: \(scored.map { "[\($0.1.source.rawValue) score=\($0.2)]" }.joined(separator: ", "))")
+                YalyricLog.info("[yalyric] Results: \(scored.map { "[\($0.1.source.rawValue) score=\($0.2)]" }.joined(separator: ", "))")
             }
 
             if let best = scored.first {
@@ -223,11 +223,11 @@ public class LyricsManager: ObservableObject {
                 saveToDisk(trackID, best.1)
                 currentLyrics = best.1
                 errorMessage = nil
-                print("[yalyric] ✓ Selected \(best.1.source.rawValue) (score: \(best.2), synced: \(best.1.isSynced), lines: \(best.1.lines.count))")
+                YalyricLog.info("[yalyric] ✓ Selected \(best.1.source.rawValue) (score: \(best.2), synced: \(best.1.isSynced), lines: \(best.1.lines.count))")
             } else {
                 currentLyrics = nil
                 errorMessage = "No lyrics found"
-                print("[yalyric] ✗ No lyrics found from any provider")
+                YalyricLog.info("[yalyric] ✗ No lyrics found from any provider")
             }
             isFetching = false
         }

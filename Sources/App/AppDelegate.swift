@@ -86,7 +86,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quitItem = NSMenuItem(title: "Quit yalyric", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
-        menuBarController?.statusItem.menu = menu
+        menuBarController?.contextMenu = menu
     }
 
     @objc private func toggleOverlayEditMode() {
@@ -331,6 +331,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlayWindow?.updateSource(lyricsManager.currentLyrics?.source)
         overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
         overlayWindow?.updateProgress(syncEngine.progress)
+        menuBarController?.updateProgress(syncEngine.progress)
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
 
         if spotifyBridge.isPlaying {
