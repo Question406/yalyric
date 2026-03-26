@@ -70,4 +70,42 @@ final class LyricsModelTests: XCTestCase {
         XCTAssertEqual(lyrics.currentLineIndex(at: 2497.5), 999)
         XCTAssertEqual(lyrics.currentLineIndex(at: 5000), 999)
     }
+
+    // MARK: - Scoring Tests
+
+    private func makeLines(_ count: Int) -> [LyricLine] {
+        (0..<count).map { LyricLine(time: Double($0) * 3, text: "Line \($0)") }
+    }
+
+    @MainActor
+    func testScoreSyncedLangMatchManyLines() {
+        // Synced(3) + lang "any" always matches(1) + >5 lines(1) = 5
+        let lyrics = Lyrics(lines: makeLines(10), source: .lrclib, isSynced: true)
+        let score = LyricsManager.scoreLyrics(lyrics, langPref: .any, trackName: "Test", trackArtist: "Artist")
+        XCTAssertEqual(score, 5)
+    }
+
+    @MainActor
+    func testScoreUnsyncedFewLines() {
+        // Not synced(0) + lang "any" matches(1) + <=5 lines(0) = 1
+        let lyrics = Lyrics(lines: makeLines(3), source: .plain, isSynced: false)
+        let score = LyricsManager.scoreLyrics(lyrics, langPref: .any, trackName: "Test", trackArtist: "Artist")
+        XCTAssertEqual(score, 1)
+    }
+
+    @MainActor
+    func testScoreSyncedFewLines() {
+        // Synced(3) + lang "any"(1) + <=5 lines(0) = 4
+        let lyrics = Lyrics(lines: makeLines(2), source: .spotify, isSynced: true)
+        let score = LyricsManager.scoreLyrics(lyrics, langPref: .any, trackName: "Test", trackArtist: "Artist")
+        XCTAssertEqual(score, 4)
+    }
+
+    @MainActor
+    func testScoreUnsyncedManyLines() {
+        // Not synced(0) + lang "any"(1) + >5 lines(1) = 2
+        let lyrics = Lyrics(lines: makeLines(20), source: .plain, isSynced: false)
+        let score = LyricsManager.scoreLyrics(lyrics, langPref: .any, trackName: "Test", trackArtist: "Artist")
+        XCTAssertEqual(score, 2)
+    }
 }

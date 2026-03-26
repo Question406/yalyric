@@ -101,7 +101,27 @@ public class LyricsManager: ObservableObject {
         }
     }
 
-    // MARK: - Fetch
+    // MARK: - Scoring
+
+    private static let maxScore = 5
+
+    static func scoreLyrics(
+        _ lyrics: Lyrics,
+        langPref: LyricsLanguagePreference,
+        trackName: String,
+        trackArtist: String
+    ) -> Int {
+        var score = 0
+        if lyrics.isSynced { score += 3 }
+        if LyricsLanguageDetector.matches(
+            lyrics: lyrics, preference: langPref,
+            trackName: trackName, trackArtist: trackArtist
+        ) { score += 1 }
+        if lyrics.lines.count > 5 { score += 1 }
+        return score
+    }
+
+    // MARK: - Fetch (parallel)
 
     private var currentFetchTask: Task<Void, Never>?
     private var currentTrackID: String?
@@ -132,48 +152,59 @@ public class LyricsManager: ObservableObject {
 
         let langPref = UserDefaults.standard.string(forKey: "lyricsLanguage")
             .flatMap { LyricsLanguagePreference(rawValue: $0) } ?? .auto
+        let providers = orderedProviders
 
         currentFetchTask = Task {
-            var bestLyrics: Lyrics?
-            var fallbackLyrics: Lyrics?  // wrong language but still usable
-
-            for provider in orderedProviders {
-                if Task.isCancelled { return }
-                do {
-                    if let lyrics = try await provider.fetch(track: track) {
-                        let langMatch = LyricsLanguageDetector.matches(
-                            lyrics: lyrics,
-                            preference: langPref,
-                            trackName: track.name,
-                            trackArtist: track.artist
-                        )
-
-                        if lyrics.isSynced && langMatch {
-                            bestLyrics = lyrics
-                            break
-                        } else if lyrics.isSynced && fallbackLyrics == nil {
-                            fallbackLyrics = lyrics
-                        } else if bestLyrics == nil && langMatch {
-                            bestLyrics = lyrics
-                        } else if fallbackLyrics == nil {
-                            fallbackLyrics = lyrics
+            // Query all providers concurrently
+            let results: [(index: Int, lyrics: Lyrics)] = await withTaskGroup(
+                of: (Int, Lyrics?).self
+            ) { group in
+                for (index, provider) in providers.enumerated() {
+                    group.addTask {
+                        do {
+                            let lyrics = try await provider.fetch(track: track)
+                            return (index, lyrics)
+                        } catch {
+                            print("[\(provider.source.rawValue)] Error: \(error.localizedDescription)")
+                            return (index, nil)
                         }
                     }
-                } catch {
-                    print("[\(provider.source.rawValue)] Error: \(error.localizedDescription)")
                 }
+
+                var collected: [(index: Int, lyrics: Lyrics)] = []
+                for await (index, lyrics) in group {
+                    guard let lyrics else { continue }
+                    collected.append((index, lyrics))
+
+                    // Early return on perfect match — no need to wait for slower providers
+                    let score = Self.scoreLyrics(lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist)
+                    if score >= Self.maxScore {
+                        group.cancelAll()
+                        break
+                    }
+                }
+                return collected
             }
 
             if Task.isCancelled { return }
             guard currentTrackID == trackID else { return }
 
-            let result = bestLyrics ?? fallbackLyrics
+            // Pick the best result: highest score, then provider order as tiebreaker
+            let best = results
+                .sorted { lhs, rhs in
+                    let lScore = Self.scoreLyrics(lhs.lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist)
+                    let rScore = Self.scoreLyrics(rhs.lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist)
+                    if lScore != rScore { return lScore > rScore }
+                    return lhs.index < rhs.index
+                }
+                .first?.lyrics
 
-            if let lyrics = result {
+            if let lyrics = best {
                 memoryCacheSet(trackID, lyrics)
                 saveToDisk(trackID, lyrics)
                 currentLyrics = lyrics
                 errorMessage = nil
+                print("[yalyric] Selected \(lyrics.source.rawValue) (synced: \(lyrics.isSynced), lines: \(lyrics.lines.count))")
             } else {
                 currentLyrics = nil
                 errorMessage = "No lyrics found"
