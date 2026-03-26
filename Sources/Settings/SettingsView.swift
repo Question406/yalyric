@@ -44,6 +44,10 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(lyricsOffset, forKey: "lyricsOffset") }
     }
 
+    @Published var durationTolerance: TimeInterval {
+        didSet { UserDefaults.standard.set(durationTolerance, forKey: "durationTolerance") }
+    }
+
     static let defaultProviderOrder = ["lrclib", "spotify", "musixmatch", "netease"]
 
     private init() {
@@ -72,6 +76,8 @@ class SettingsManager: ObservableObject {
         let savedDelay = UserDefaults.standard.double(forKey: "autoHideDelay")
         autoHideDelay = savedDelay > 0 ? savedDelay : 3.0
         lyricsOffset = UserDefaults.standard.double(forKey: "lyricsOffset")
+        let savedTolerance = UserDefaults.standard.double(forKey: "durationTolerance")
+        durationTolerance = savedTolerance > 0 ? savedTolerance : 30.0
     }
 }
 
@@ -404,6 +410,22 @@ struct SourcesTab: View {
                 .controlSize(.small)
             } header: {
                 Text("Lyrics Providers")
+            }
+
+            Section("Duration Matching") {
+                HStack {
+                    Text("Tolerance")
+                    Spacer()
+                    Slider(value: $settings.durationTolerance, in: 5...60, step: 5)
+                        .frame(width: 180)
+                    Text(String(format: "%.0fs", settings.durationTolerance))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, alignment: .trailing)
+                }
+                Text("How much duration mismatch to allow between Spotify and lyrics databases")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Spotify SP_DC Cookie") {

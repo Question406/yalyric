@@ -4,22 +4,29 @@ public struct LRCLIBProvider: LyricsProvider {
     public let source: LyricsSource = .lrclib
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
-        // Try exact match first
-        if let lyrics = try await fetchExact(track: track) {
+        // Try exact match with duration
+        if let lyrics = try await fetchExact(track: track, includeDuration: true) {
+            return lyrics
+        }
+        // Try exact match without duration (Spotify sometimes reports wrong duration)
+        if let lyrics = try await fetchExact(track: track, includeDuration: false) {
             return lyrics
         }
         // Fallback to search
         return try await fetchSearch(track: track)
     }
 
-    private func fetchExact(track: TrackInfo) async throws -> Lyrics? {
+    private func fetchExact(track: TrackInfo, includeDuration: Bool) async throws -> Lyrics? {
         var components = URLComponents(string: "https://lrclib.net/api/get")!
-        components.queryItems = [
+        var queryItems = [
             URLQueryItem(name: "artist_name", value: track.artist),
             URLQueryItem(name: "track_name", value: track.name),
             URLQueryItem(name: "album_name", value: track.album),
-            URLQueryItem(name: "duration", value: String(Int(track.duration)))
         ]
+        if includeDuration {
+            queryItems.append(URLQueryItem(name: "duration", value: String(Int(track.duration))))
+        }
+        components.queryItems = queryItems
 
         guard let url = components.url else { return nil }
         let request = providerRequest(url: url)
@@ -46,20 +53,12 @@ public struct LRCLIBProvider: LyricsProvider {
 
         guard let results = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return nil }
 
-        // Filter by duration (within 5s tolerance)
+        // Score results: prefer exact artist/track name match + close duration + synced lyrics
         let targetDuration = track.duration
-        let durationMatched = results.filter { result in
-            guard let duration = result["duration"] as? Double else { return false }
-            return abs(duration - targetDuration) < 5.0
-        }
-
-        guard !durationMatched.isEmpty else { return nil }
-
-        // Score results: prefer exact artist/track name match + synced lyrics
         let trackNameLower = track.name.lowercased()
         let artistLower = track.artist.lowercased()
 
-        let scored = durationMatched.map { result -> (result: [String: Any], score: Int) in
+        let scored = results.map { result -> (result: [String: Any], score: Int) in
             var score = 0
             if let name = result["trackName"] as? String,
                name.lowercased() == trackNameLower { score += 2 }
@@ -67,6 +66,9 @@ public struct LRCLIBProvider: LyricsProvider {
                artist.lowercased() == artistLower { score += 2 }
             if let synced = result["syncedLyrics"] as? String,
                !synced.isEmpty { score += 1 }
+            // Duration within tolerance gets a bonus; Spotify sometimes reports inaccurate durations
+            if let duration = result["duration"] as? Double,
+               abs(duration - targetDuration) < durationToleranceSeconds { score += 2 }
             return (result, score)
         }.sorted { $0.score > $1.score }
 

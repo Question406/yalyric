@@ -45,8 +45,8 @@ public struct NetEaseProvider: LyricsProvider {
             }
         }
 
-        // Only accept if duration difference is within 5 seconds
-        if let match = bestMatch, match.diff < 5000 {
+        // Accept if duration difference is within configured tolerance
+        if let match = bestMatch, match.diff < durationToleranceSeconds * 1000 {
             return match.id
         }
         return nil

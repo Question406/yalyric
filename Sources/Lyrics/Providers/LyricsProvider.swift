@@ -7,6 +7,11 @@ public protocol LyricsProvider {
 
 let providerTimeout: TimeInterval = 5.0
 
+var durationToleranceSeconds: Double {
+    let saved = UserDefaults.standard.double(forKey: "durationTolerance")
+    return saved > 0 ? saved : 30.0
+}
+
 func providerRequest(url: URL, userAgent: String = "yalyric/1.0") -> URLRequest {
     var request = URLRequest(url: url)
     request.timeoutInterval = providerTimeout
