@@ -89,7 +89,7 @@ struct Theme: Equatable {
 
     // Background
     var backgroundStyle: BackgroundStyle = .none
-    var backgroundColor: NSColor = NSColor.black.withAlphaComponent(0.5)
+    var backgroundColor: NSColor = NSColor.black.withAlphaComponent(0.25)
     var backgroundCornerRadius: CGFloat = 12
 
     // Animation
@@ -154,7 +154,7 @@ class ThemeManager: ObservableObject {
             t.shadowColor = NSColor(red: 0.0, green: 1.0, blue: 0.6, alpha: 0.6)
             t.shadowBlurRadius = 12
             t.backgroundStyle = .pill
-            t.backgroundColor = NSColor.black.withAlphaComponent(0.7)
+            t.backgroundColor = NSColor.black.withAlphaComponent(0.35)
             return t
         }()),
         ("Minimal", {
@@ -173,14 +173,14 @@ class ThemeManager: ObservableObject {
             t.nextLineFontSize = 20
             t.overlayPosition = .center
             t.backgroundStyle = .bar
-            t.backgroundColor = NSColor.black.withAlphaComponent(0.6)
+            t.backgroundColor = NSColor.black.withAlphaComponent(0.3)
             return t
         }()),
         ("Spotify", {
             var t = Theme()
             t.textColor = NSColor(red: 0.12, green: 0.84, blue: 0.38, alpha: 1.0)
             t.backgroundStyle = .pill
-            t.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 0.9)
+            t.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 0.5)
             t.backgroundCornerRadius = 8
             return t
         }()),
@@ -193,7 +193,7 @@ class ThemeManager: ObservableObject {
             t.textColor = NSColor(red: 0.0, green: 1.0, blue: 0.0, alpha: 1.0)
             t.transitionStyle = .none
             t.backgroundStyle = .pill
-            t.backgroundColor = NSColor.black.withAlphaComponent(0.85)
+            t.backgroundColor = NSColor.black.withAlphaComponent(0.45)
             t.letterSpacing = 1
             return t
         }()),
