@@ -8,26 +8,10 @@ class SpotifyBridge: ObservableObject {
     @Published var playbackPosition: TimeInterval = 0
 
     private var pollTimer: Timer?
-    private var lastTrackID: String?
 
-    func startPolling(interval: TimeInterval = 0.5) {
-        stopPolling()
-        fetchCurrentState()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            MainActor.assumeIsolated {
-                self.fetchCurrentState()
-            }
-        }
-    }
-
-    func stopPolling() {
-        pollTimer?.invalidate()
-        pollTimer = nil
-    }
-
-    private func fetchCurrentState() {
-        let script = """
+    /// Pre-compiled script — compiled once, reused every poll
+    private nonisolated(unsafe) static let compiledScript: NSAppleScript? = {
+        let source = """
         if application "Spotify" is running then
             tell application "Spotify"
                 if player state is playing then
@@ -54,20 +38,51 @@ class SpotifyBridge: ObservableObject {
             return "not_running"
         end if
         """
+        let script = NSAppleScript(source: source)
+        script?.compileAndReturnError(nil)
+        return script
+    }()
 
-        guard let appleScript = NSAppleScript(source: script) else { return }
-        var error: NSDictionary?
-        let result = appleScript.executeAndReturnError(&error)
+    private static let pollQueue = DispatchQueue(label: "com.yalyric.spotify-poll", qos: .userInitiated)
 
-        if error != nil {
-            currentTrack = nil
-            isPlaying = false
-            return
+    func startPolling(interval: TimeInterval = 0.5) {
+        stopPolling()
+        poll()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                self.poll()
+            }
         }
+    }
 
-        let output = result.stringValue ?? ""
+    func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
 
-        if output == "not_running" || output == "stopped" {
+    private func poll() {
+        // Run AppleScript on a background queue to avoid blocking the main thread
+        Self.pollQueue.async { [weak self] in
+            let output = Self.executeScript()
+            DispatchQueue.main.async {
+                self?.handleResult(output)
+            }
+        }
+    }
+
+    private nonisolated static func executeScript() -> String {
+        guard let script = compiledScript else { return "error" }
+
+        // NSAppleScript is not thread-safe — but we only call from our serial queue
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        if error != nil { return "error" }
+        return result.stringValue ?? ""
+    }
+
+    private func handleResult(_ output: String) {
+        if output == "not_running" || output == "stopped" || output == "error" {
             currentTrack = nil
             isPlaying = false
             return
