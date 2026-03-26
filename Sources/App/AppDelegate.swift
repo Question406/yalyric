@@ -13,6 +13,12 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var settingsWindowController: SettingsWindowController?
     private var cancellables = Set<AnyCancellable>()
+    private var lastDisplayedLineIndex: Int = -2  // -2 = never displayed
+    private var lastDisplayState: DisplayState = .noTrack
+
+    private enum DisplayState: Equatable {
+        case noTrack, loading, noLyrics, intro, lyrics
+    }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon — menu bar app
@@ -91,10 +97,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             .removeDuplicates()
             .sink { [weak self] track in
                 guard let self, let track else {
+                    self?.lastDisplayedLineIndex = -2
+                    self?.lastDisplayState = .noTrack
                     self?.syncEngine.setLyrics(nil)
                     self?.updateAllDisplays()
                     return
                 }
+                self.lastDisplayedLineIndex = -2
+                self.lastDisplayState = .noTrack
                 self.lyricsManager.fetchLyrics(for: track)
             }
             .store(in: &cancellables)
@@ -102,6 +112,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // When lyrics are fetched, update sync engine
         lyricsManager.$currentLyrics
             .sink { [weak self] lyrics in
+                self?.lastDisplayedLineIndex = -2
                 self?.syncEngine.setLyrics(lyrics)
             }
             .store(in: &cancellables)
@@ -132,8 +143,30 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         let lines = syncEngine.allLines
         let track = spotifyBridge.currentTrack
 
+        // Determine current display state
+        let state: DisplayState
+        if track == nil {
+            state = .noTrack
+        } else if lyricsManager.isFetching {
+            state = .loading
+        } else if lyricsManager.errorMessage != nil {
+            state = .noLyrics
+        } else if index == -1 && spotifyBridge.isPlaying {
+            state = .intro
+        } else {
+            state = .lyrics
+        }
+
+        // Skip if nothing changed (only for normal lyrics state where index matters)
+        if state == .lyrics && state == lastDisplayState && index == lastDisplayedLineIndex {
+            return
+        }
+        lastDisplayState = state
+        lastDisplayedLineIndex = index
+
         if track == nil {
             // No track playing
+            overlayWindow?.updateSource(nil)
             overlayWindow?.updateLyrics(current: "", next: "")
             menuBarController?.updateCurrentLine("")
             return
@@ -141,6 +174,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         if lyricsManager.isFetching {
             // Still loading lyrics — show track info
+            overlayWindow?.updateSource(nil)
             overlayWindow?.showTrackInfo(
                 title: track!.name,
                 artist: track!.artist
@@ -173,6 +207,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Normal lyrics display
+        overlayWindow?.updateSource(lyricsManager.currentLyrics?.source)
         overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
 

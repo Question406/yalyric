@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LyricLine: Equatable {
+public struct LyricLine: Equatable, Codable {
     public let time: TimeInterval  // seconds
     public let text: String
 
@@ -10,7 +10,7 @@ public struct LyricLine: Equatable {
     }
 }
 
-public enum LyricsSource: String {
+public enum LyricsSource: String, Codable {
     case lrclib
     case spotify
     case musixmatch
@@ -18,7 +18,7 @@ public enum LyricsSource: String {
     case plain  // unsynced plain text
 }
 
-public struct Lyrics {
+public struct Lyrics: Codable {
     public let lines: [LyricLine]  // sorted by time
     public let source: LyricsSource
     public let isSynced: Bool

@@ -6,6 +6,7 @@ class OverlayWindow: NSWindow {
     private let currentLabelA = NSTextField(labelWithString: "")
     private let currentLabelB = NSTextField(labelWithString: "")
     private let nextLyricLabel = NSTextField(labelWithString: "")
+    private let sourceLabel = NSTextField(labelWithString: "")
     private var useA = true
 
     private var currentTopA: NSLayoutConstraint!
@@ -16,8 +17,12 @@ class OverlayWindow: NSWindow {
     private var backgroundLayer: CALayer?
 
     private let slideDistance: CGFloat = 12
+    private let horizontalPadding: CGFloat = 16
+    private let minOverlayWidth: CGFloat = 200
     private var cancellables = Set<AnyCancellable>()
     private var isAnimating = false
+    private var isMouseInside = false
+    private var mouseMonitor: Any?
 
     init() {
         let theme = ThemeManager.shared.theme
@@ -43,6 +48,33 @@ class OverlayWindow: NSWindow {
         setupContent()
         applyTheme(theme)
         observeTheme()
+        setupMouseTracking()
+    }
+
+    private func setupMouseTracking() {
+        mouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
+            self?.checkMousePosition()
+        }
+    }
+
+    private func checkMousePosition() {
+        let mouseLocation = NSEvent.mouseLocation  // screen coordinates
+        let inside = frame.contains(mouseLocation)
+
+        guard inside != isMouseInside else { return }
+        isMouseInside = inside
+
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            sourceLabel.animator().alphaValue = inside ? 1 : 0
+        }
+    }
+
+    deinit {
+        if let monitor = mouseMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 
     private func observeTheme() {
@@ -77,9 +109,16 @@ class OverlayWindow: NSWindow {
         currentLabelB.alphaValue = 0
         configureLabel(nextLyricLabel)
 
+        configureLabel(sourceLabel)
+        sourceLabel.font = NSFont.systemFont(ofSize: 9, weight: .medium)
+        sourceLabel.textColor = NSColor.white.withAlphaComponent(0.3)
+        sourceLabel.alignment = .right
+        sourceLabel.alphaValue = 0
+
         container.addSubview(currentLabelA)
         container.addSubview(currentLabelB)
         container.addSubview(nextLyricLabel)
+        container.addSubview(sourceLabel)
 
         currentTopA = currentLabelA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
         currentTopB = currentLabelB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
@@ -96,6 +135,9 @@ class OverlayWindow: NSWindow {
             nextLyricLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             nextLyricLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             nextLyricLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 44),
+
+            sourceLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            sourceLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
         ])
 
         contentView = container
@@ -204,6 +246,51 @@ class OverlayWindow: NSWindow {
         setFrame(NSRect(origin: origin, size: newSize), display: true)
     }
 
+    // MARK: - Dynamic Width
+
+    private func measureTextWidth(_ text: String, font: NSFont, letterSpacing: CGFloat) -> CGFloat {
+        guard !text.isEmpty else { return 0 }
+        var attrs: [NSAttributedString.Key: Any] = [.font: font]
+        if letterSpacing != 0 {
+            attrs[.kern] = letterSpacing
+        }
+        let size = (text as NSString).size(withAttributes: attrs)
+        return ceil(size.width)
+    }
+
+    private func resizeToFit(currentText: String, nextText: String, animated: Bool) {
+        let theme = ThemeManager.shared.theme
+
+        // Bar mode stays full-width
+        if theme.backgroundStyle == .bar { return }
+
+        let currentWidth = measureTextWidth(currentText, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
+        let nextWidth = measureTextWidth(nextText, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
+        let textWidth = max(currentWidth, nextWidth)
+        let targetWidth = min(
+            theme.overlayWidth,
+            max(minOverlayWidth, textWidth + horizontalPadding * 2)
+        )
+
+        let currentFrame = frame
+        guard abs(currentFrame.width - targetWidth) > 2 else { return }
+
+        // Keep horizontal center stable
+        let centerX = currentFrame.midX
+        let newOrigin = NSPoint(x: centerX - targetWidth / 2, y: currentFrame.origin.y)
+        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: currentFrame.height))
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = theme.animationDuration
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.animator().setFrame(newFrame, display: true)
+            }
+        } else {
+            setFrame(newFrame, display: true)
+        }
+    }
+
     // MARK: - Reset labels to clean state
 
     /// Cancel any in-flight animation and snap labels to a clean state
@@ -249,6 +336,7 @@ class OverlayWindow: NSWindow {
             let restY: CGFloat = 8
 
             incomingLabel.stringValue = current
+            resizeToFit(currentText: current, nextText: next, animated: theme.transitionStyle != .none)
 
             switch theme.transitionStyle {
             case .none:
@@ -351,6 +439,8 @@ class OverlayWindow: NSWindow {
         }
 
         if nextLyricLabel.stringValue != next {
+            let activeLabel = useA ? currentLabelA : currentLabelB
+            resizeToFit(currentText: activeLabel.stringValue, nextText: next, animated: true)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -364,6 +454,21 @@ class OverlayWindow: NSWindow {
                     self.nextLyricLabel.animator().alphaValue = opacity
                 }
             }
+        }
+    }
+
+    func updateSource(_ source: LyricsSource?) {
+        let text: String
+        switch source {
+        case .lrclib: text = "via LRCLIB"
+        case .spotify: text = "via Spotify"
+        case .musixmatch: text = "via Musixmatch"
+        case .netease: text = "via NetEase"
+        case .plain: text = "plain text"
+        case nil: text = ""
+        }
+        if sourceLabel.stringValue != text {
+            sourceLabel.stringValue = text
         }
     }
 

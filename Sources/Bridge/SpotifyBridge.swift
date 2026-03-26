@@ -8,6 +8,8 @@ class SpotifyBridge: ObservableObject {
     @Published var playbackPosition: TimeInterval = 0
 
     private var pollTimer: Timer?
+    private let activeInterval: TimeInterval = 0.5
+    private let idleInterval: TimeInterval = 2.0
 
     /// Pre-compiled script — compiled once, reused every poll
     private nonisolated(unsafe) static let compiledScript: NSAppleScript? = {
@@ -45,13 +47,20 @@ class SpotifyBridge: ObservableObject {
 
     private static let pollQueue = DispatchQueue(label: "com.yalyric.spotify-poll", qos: .userInitiated)
 
-    func startPolling(interval: TimeInterval = 0.5) {
+    func startPolling() {
         stopPolling()
         poll()
-        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        schedulePoll(interval: activeInterval)
+    }
+
+    private func schedulePoll(interval: TimeInterval) {
+        pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             guard let self else { return }
             MainActor.assumeIsolated {
                 self.poll()
+                // Poll fast while playing, slow down when idle
+                let next = self.isPlaying ? self.activeInterval : self.idleInterval
+                self.schedulePoll(interval: next)
             }
         }
     }
