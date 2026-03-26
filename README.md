@@ -55,27 +55,29 @@ Providers are tried in waterfall order — the first one to return synced lyrics
 
 ## Installation
 
+### Download (easiest)
+
+1. Download `yalyric-vX.X.X-macos.zip` from [GitHub Releases](https://github.com/yourname/yalyric/releases)
+2. Unzip and drag `yalyric.app` to `/Applications`
+3. Double-click to launch
+
+> **Note:** Since the app is not signed, macOS will block it on first launch. Right-click the app → Open → click "Open" in the dialog. On macOS Sequoia, you may need to go to System Settings → Privacy & Security → click "Open Anyway".
+
 ### Build from Source
 
 ```bash
 git clone https://github.com/yourname/yalyric.git
 cd yalyric
-swift build -c release
-```
 
-The binary will be at `.build/release/yalyric`.
+# Build .app bundle
+./scripts/bundle.sh
+# Output: dist/yalyric.app
 
-### Run
-
-```bash
-# Debug
+# Or run directly during development
 swift build && .build/debug/yalyric
-
-# Release
-swift build -c release && .build/release/yalyric
 ```
 
-The app appears as a music note icon in the menu bar. Play a song in Spotify and lyrics will appear.
+The app appears as a ♪ icon in the menu bar. Play a song in Spotify and lyrics will appear.
 
 ## Configuration
 
