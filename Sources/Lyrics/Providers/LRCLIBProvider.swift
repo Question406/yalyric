@@ -22,7 +22,7 @@ public struct LRCLIBProvider: LyricsProvider {
         ]
 
         guard let url = components.url else { return nil }
-        var request = providerRequest(url: url)
+        let request = providerRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
@@ -38,7 +38,7 @@ public struct LRCLIBProvider: LyricsProvider {
         ]
 
         guard let url = components.url else { return nil }
-        var request = providerRequest(url: url)
+        let request = providerRequest(url: url)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,

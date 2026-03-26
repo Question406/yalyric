@@ -14,8 +14,9 @@ class SpotifyBridge: ObservableObject {
         stopPolling()
         fetchCurrentState()
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.fetchCurrentState()
+            guard let self else { return }
+            MainActor.assumeIsolated {
+                self.fetchCurrentState()
             }
         }
     }
