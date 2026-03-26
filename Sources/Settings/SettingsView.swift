@@ -1,4 +1,8 @@
 import AppKit
+import SwiftUI
+import Combine
+
+// MARK: - Data Models
 
 enum DisplayMode: String, CaseIterable {
     case overlay = "Floating Overlay"
@@ -16,16 +20,20 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    @Published var fontSize: CGFloat {
-        didSet { UserDefaults.standard.set(Double(fontSize), forKey: "fontSize") }
-    }
-
     @Published var spDCCookie: String {
         didSet { UserDefaults.standard.set(spDCCookie, forKey: "spDCCookie") }
     }
 
     @Published var lyricsLanguage: LyricsLanguagePreference {
         didSet { UserDefaults.standard.set(lyricsLanguage.rawValue, forKey: "lyricsLanguage") }
+    }
+
+    @Published var autoHideOnPause: Bool {
+        didSet { UserDefaults.standard.set(autoHideOnPause, forKey: "autoHideOnPause") }
+    }
+
+    @Published var autoHideDelay: TimeInterval {
+        didSet { UserDefaults.standard.set(autoHideDelay, forKey: "autoHideDelay") }
     }
 
     private init() {
@@ -35,9 +43,6 @@ class SettingsManager: ObservableObject {
             enabledDisplayModes = [.overlay, .menuBar]
         }
 
-        let savedSize = UserDefaults.standard.double(forKey: "fontSize")
-        fontSize = savedSize > 0 ? CGFloat(savedSize) : 24
-
         spDCCookie = UserDefaults.standard.string(forKey: "spDCCookie") ?? ""
 
         if let savedLang = UserDefaults.standard.string(forKey: "lyricsLanguage"),
@@ -46,145 +51,335 @@ class SettingsManager: ObservableObject {
         } else {
             lyricsLanguage = .auto
         }
+
+        autoHideOnPause = UserDefaults.standard.object(forKey: "autoHideOnPause") as? Bool ?? true
+        let savedDelay = UserDefaults.standard.double(forKey: "autoHideDelay")
+        autoHideDelay = savedDelay > 0 ? savedDelay : 3.0
     }
 }
+
+// MARK: - SwiftUI Settings View
+
+struct SettingsContentView: View {
+    @ObservedObject var settings = SettingsManager.shared
+    @ObservedObject var themeManager = ThemeManager.shared
+
+    var body: some View {
+        TabView {
+            GeneralTab(settings: settings)
+                .tabItem { Label("General", systemImage: "gear") }
+            AppearanceTab(themeManager: themeManager)
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
+            SourcesTab(settings: settings)
+                .tabItem { Label("Sources", systemImage: "music.note.list") }
+        }
+        .frame(width: 500, height: 460)
+        .padding(8)
+    }
+}
+
+// MARK: - General Tab
+
+struct GeneralTab: View {
+    @ObservedObject var settings: SettingsManager
+
+    var body: some View {
+        Form {
+            Section("Display Modes") {
+                ForEach(DisplayMode.allCases, id: \.rawValue) { mode in
+                    Toggle(mode.rawValue, isOn: Binding(
+                        get: { settings.enabledDisplayModes.contains(mode) },
+                        set: { enabled in
+                            if enabled { settings.enabledDisplayModes.insert(mode) }
+                            else { settings.enabledDisplayModes.remove(mode) }
+                            NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+                        }
+                    ))
+                }
+            }
+
+            Section("Behavior") {
+                Toggle("Auto-hide overlay when paused", isOn: $settings.autoHideOnPause)
+                if settings.autoHideOnPause {
+                    HStack {
+                        Text("Hide after")
+                        Picker("", selection: $settings.autoHideDelay) {
+                            Text("Immediately").tag(0.0 as TimeInterval)
+                            Text("3 seconds").tag(3.0 as TimeInterval)
+                            Text("5 seconds").tag(5.0 as TimeInterval)
+                            Text("10 seconds").tag(10.0 as TimeInterval)
+                        }
+                        .labelsHidden()
+                        .frame(width: 140)
+                    }
+                }
+            }
+
+            Section("Lyrics Language") {
+                Picker("Preferred language", selection: $settings.lyricsLanguage) {
+                    ForEach(LyricsLanguagePreference.allCases, id: \.rawValue) { lang in
+                        Text(lang.rawValue).tag(lang)
+                    }
+                }
+                Text("\"Auto\" detects the song's language and filters mismatched lyrics")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Appearance Tab
+
+struct AppearanceTab: View {
+    @ObservedObject var themeManager: ThemeManager
+
+    @State private var textColorSwiftUI: Color = .white
+    @State private var bgColorSwiftUI: Color = Color(nsColor: NSColor.black.withAlphaComponent(0.5))
+
+    var body: some View {
+        Form {
+            Section("Theme Presets") {
+                HStack(spacing: 8) {
+                    ForEach(ThemeManager.presets, id: \.name) { preset in
+                        Button(preset.name) {
+                            themeManager.applyPreset(preset.name)
+                            syncColorsFromTheme()
+                            NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                }
+            }
+
+            Section("Typography") {
+                HStack {
+                    Text("Font")
+                    Spacer()
+                    Picker("", selection: $themeManager.theme.fontName) {
+                        Text("System (SF Pro)").tag("")
+                        Text("SF Mono").tag("SF Mono")
+                        Text("Menlo").tag("Menlo")
+                        Text("Helvetica Neue").tag("Helvetica Neue")
+                        Text("Georgia").tag("Georgia")
+                        Text("Futura").tag("Futura Medium")
+                    }
+                    .labelsHidden()
+                    .frame(width: 180)
+                }
+
+                LabeledSlider(
+                    label: "Current line size",
+                    value: $themeManager.theme.currentLineFontSize,
+                    range: 12...48,
+                    format: "%.0fpt"
+                )
+                LabeledSlider(
+                    label: "Next line size",
+                    value: $themeManager.theme.nextLineFontSize,
+                    range: 10...36,
+                    format: "%.0fpt"
+                )
+                LabeledSlider(
+                    label: "Letter spacing",
+                    value: $themeManager.theme.letterSpacing,
+                    range: -2...8,
+                    format: "%.1f"
+                )
+            }
+
+            Section("Colors") {
+                ColorPicker("Text color", selection: $textColorSwiftUI, supportsOpacity: false)
+                    .onChange(of: textColorSwiftUI) { newValue in
+                        themeManager.theme.textColor = NSColor(newValue)
+                    }
+                LabeledSlider(
+                    label: "Next line opacity",
+                    value: $themeManager.theme.nextLineOpacity,
+                    range: 0.1...1.0,
+                    format: "%.0f%%",
+                    displayMultiplier: 100
+                )
+                LabeledSlider(
+                    label: "Shadow blur",
+                    value: $themeManager.theme.shadowBlurRadius,
+                    range: 0...20,
+                    format: "%.0f"
+                )
+            }
+
+            Section("Background") {
+                Picker("Style", selection: $themeManager.theme.backgroundStyle) {
+                    ForEach(BackgroundStyle.allCases, id: \.rawValue) { style in
+                        Text(style.rawValue).tag(style)
+                    }
+                }
+                if themeManager.theme.backgroundStyle == .solidPill {
+                    ColorPicker("Background color", selection: $bgColorSwiftUI, supportsOpacity: true)
+                        .onChange(of: bgColorSwiftUI) { newValue in
+                            themeManager.theme.backgroundColor = NSColor(newValue)
+                        }
+                }
+                if themeManager.theme.backgroundStyle == .frostedPill || themeManager.theme.backgroundStyle == .solidPill {
+                    LabeledSlider(
+                        label: "Corner radius",
+                        value: $themeManager.theme.backgroundCornerRadius,
+                        range: 0...24,
+                        format: "%.0f"
+                    )
+                }
+            }
+
+            Section("Animation") {
+                Picker("Transition", selection: $themeManager.theme.transitionStyle) {
+                    ForEach(TransitionStyle.allCases, id: \.rawValue) { style in
+                        Text(style.rawValue).tag(style)
+                    }
+                }
+                if themeManager.theme.transitionStyle != .none {
+                    HStack {
+                        Text("Duration")
+                        Spacer()
+                        Slider(value: $themeManager.theme.animationDuration, in: 0.1...1.0)
+                            .frame(width: 180)
+                        Text(String(format: "%.1fs", themeManager.theme.animationDuration))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+            }
+
+            Section("Position") {
+                Picker("Overlay position", selection: $themeManager.theme.overlayPosition) {
+                    ForEach(OverlayPosition.allCases, id: \.rawValue) { pos in
+                        Text(pos.rawValue).tag(pos)
+                    }
+                }
+                LabeledSlider(
+                    label: "Overlay width",
+                    value: $themeManager.theme.overlayWidth,
+                    range: 400...1600,
+                    format: "%.0f"
+                )
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { syncColorsFromTheme() }
+        .onChange(of: themeManager.theme) { _ in
+            syncColorsFromTheme()
+            NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+        }
+    }
+
+    private func syncColorsFromTheme() {
+        textColorSwiftUI = Color(nsColor: themeManager.theme.textColor)
+        bgColorSwiftUI = Color(nsColor: themeManager.theme.backgroundColor)
+    }
+}
+
+// MARK: - Sources Tab
+
+struct SourcesTab: View {
+    @ObservedObject var settings: SettingsManager
+
+    var body: some View {
+        Form {
+            Section("Lyrics Providers") {
+                Text("Providers are tried in order. The first to return synced lyrics wins.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Image(systemName: "1.circle.fill")
+                    Text("LRCLIB")
+                    Spacer()
+                    Text("Free, no auth")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Image(systemName: "2.circle.fill")
+                    Text("Spotify Internal")
+                    Spacer()
+                    Text("Requires SP_DC cookie")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Image(systemName: "3.circle.fill")
+                    Text("Musixmatch")
+                    Spacer()
+                    Text("Auto-token")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                HStack {
+                    Image(systemName: "4.circle.fill")
+                    Text("NetEase Cloud Music")
+                    Spacer()
+                    Text("Good for CJK")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Section("Spotify SP_DC Cookie") {
+                SecureField("Paste your sp_dc cookie here", text: $settings.spDCCookie)
+                Text("Get from Spotify Web Player → DevTools → Application → Cookies → sp_dc")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Helpers
+
+struct LabeledSlider: View {
+    let label: String
+    @Binding var value: CGFloat
+    let range: ClosedRange<CGFloat>
+    let format: String
+    var displayMultiplier: CGFloat = 1
+
+    var body: some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Slider(value: $value, in: range)
+                .frame(width: 180)
+            Text(String(format: format, value * displayMultiplier))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .trailing)
+        }
+    }
+}
+
+// MARK: - Window Controller
 
 class SettingsWindowController: NSWindowController {
     convenience init() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 450, height: 420),
-            styleMask: [.titled, .closable],
-            backing: .buffered,
-            defer: false
-        )
+        let settingsView = SettingsContentView()
+        let hostingController = NSHostingController(rootView: settingsView)
+
+        let window = NSWindow(contentViewController: hostingController)
         window.title = "yalyric Settings"
+        window.styleMask = [.titled, .closable]
         window.center()
 
         self.init(window: window)
-        setupContent()
-    }
-
-    private func setupContent() {
-        guard let window = window else { return }
-        let settings = SettingsManager.shared
-
-        let container = NSView(frame: window.contentView!.bounds)
-        container.autoresizingMask = [.width, .height]
-
-        var yOffset: CGFloat = 370
-
-        // Section: Display Modes
-        let modeTitle = makeLabel("Display Modes", bold: true)
-        modeTitle.frame.origin = NSPoint(x: 20, y: yOffset)
-        container.addSubview(modeTitle)
-        yOffset -= 30
-
-        for mode in DisplayMode.allCases {
-            let checkbox = NSButton(checkboxWithTitle: mode.rawValue, target: nil, action: nil)
-            checkbox.state = settings.enabledDisplayModes.contains(mode) ? .on : .off
-            checkbox.frame.origin = NSPoint(x: 30, y: yOffset)
-            checkbox.tag = DisplayMode.allCases.firstIndex(of: mode)!
-            checkbox.target = self
-            checkbox.action = #selector(toggleDisplayMode(_:))
-            container.addSubview(checkbox)
-            yOffset -= 26
-        }
-
-        yOffset -= 10
-
-        // Section: Lyrics Language
-        let langTitle = makeLabel("Lyrics Language", bold: true)
-        langTitle.frame.origin = NSPoint(x: 20, y: yOffset)
-        container.addSubview(langTitle)
-        yOffset -= 28
-
-        let langPopup = NSPopUpButton(frame: NSRect(x: 30, y: yOffset, width: 280, height: 26), pullsDown: false)
-        for lang in LyricsLanguagePreference.allCases {
-            langPopup.addItem(withTitle: lang.rawValue)
-        }
-        langPopup.selectItem(withTitle: settings.lyricsLanguage.rawValue)
-        langPopup.target = self
-        langPopup.action = #selector(languageChanged(_:))
-        container.addSubview(langPopup)
-        yOffset -= 22
-
-        let langHint = makeLabel("\"Auto\" detects the song's language and filters mismatched lyrics", bold: false)
-        langHint.font = NSFont.systemFont(ofSize: 11)
-        langHint.textColor = .secondaryLabelColor
-        langHint.frame.origin = NSPoint(x: 30, y: yOffset)
-        container.addSubview(langHint)
-        yOffset -= 30
-
-        // Section: Spotify SP_DC Cookie
-        let cookieTitle = makeLabel("Spotify SP_DC Cookie (for Spotify lyrics source)", bold: true)
-        cookieTitle.frame.origin = NSPoint(x: 20, y: yOffset)
-        container.addSubview(cookieTitle)
-        yOffset -= 28
-
-        let cookieField = NSTextField(frame: NSRect(x: 30, y: yOffset, width: 380, height: 24))
-        cookieField.stringValue = settings.spDCCookie
-        cookieField.placeholderString = "Paste your sp_dc cookie here"
-        cookieField.target = self
-        cookieField.action = #selector(cookieChanged(_:))
-        container.addSubview(cookieField)
-        yOffset -= 22
-
-        let cookieHint = makeLabel("Get from Spotify Web Player cookies in browser DevTools", bold: false)
-        cookieHint.font = NSFont.systemFont(ofSize: 11)
-        cookieHint.textColor = .secondaryLabelColor
-        cookieHint.frame.origin = NSPoint(x: 30, y: yOffset)
-        container.addSubview(cookieHint)
-        yOffset -= 30
-
-        // Section: Font Size
-        let fontTitle = makeLabel("Font Size: \(Int(settings.fontSize))pt", bold: true)
-        fontTitle.frame.origin = NSPoint(x: 20, y: yOffset)
-        fontTitle.tag = 999
-        container.addSubview(fontTitle)
-        yOffset -= 28
-
-        let slider = NSSlider(value: Double(settings.fontSize), minValue: 12, maxValue: 48, target: self, action: #selector(fontSizeChanged(_:)))
-        slider.frame = NSRect(x: 30, y: yOffset, width: 380, height: 24)
-        container.addSubview(slider)
-
-        window.contentView = container
-    }
-
-    private func makeLabel(_ text: String, bold: Bool) -> NSTextField {
-        let label = NSTextField(labelWithString: text)
-        label.font = bold ? NSFont.systemFont(ofSize: 13, weight: .semibold) : NSFont.systemFont(ofSize: 13)
-        label.sizeToFit()
-        return label
-    }
-
-    @objc private func toggleDisplayMode(_ sender: NSButton) {
-        let mode = DisplayMode.allCases[sender.tag]
-        if sender.state == .on {
-            SettingsManager.shared.enabledDisplayModes.insert(mode)
-        } else {
-            SettingsManager.shared.enabledDisplayModes.remove(mode)
-        }
-        NotificationCenter.default.post(name: .displayModesChanged, object: nil)
-    }
-
-    @objc private func languageChanged(_ sender: NSPopUpButton) {
-        guard let title = sender.selectedItem?.title,
-              let lang = LyricsLanguagePreference(rawValue: title) else { return }
-        SettingsManager.shared.lyricsLanguage = lang
-    }
-
-    @objc private func cookieChanged(_ sender: NSTextField) {
-        SettingsManager.shared.spDCCookie = sender.stringValue
-    }
-
-    @objc private func fontSizeChanged(_ sender: NSSlider) {
-        SettingsManager.shared.fontSize = CGFloat(sender.doubleValue)
-        if let label = window?.contentView?.viewWithTag(999) as? NSTextField {
-            label.stringValue = "Font Size: \(Int(sender.doubleValue))pt"
-        }
-        NotificationCenter.default.post(name: .displayModesChanged, object: nil)
     }
 }
+
+// MARK: - Notifications
 
 extension Notification.Name {
     static let displayModesChanged = Notification.Name("displayModesChanged")

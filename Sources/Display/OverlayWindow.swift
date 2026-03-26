@@ -1,28 +1,31 @@
 import AppKit
 import QuartzCore
+import Combine
 
 class OverlayWindow: NSWindow {
-    // Two label pairs that alternate for crossfade transitions
     private let currentLabelA = NSTextField(labelWithString: "")
     private let currentLabelB = NSTextField(labelWithString: "")
     private let nextLyricLabel = NSTextField(labelWithString: "")
-    private var useA = true  // which label is currently visible
+    private var useA = true
 
     private var currentTopA: NSLayoutConstraint!
     private var currentTopB: NSLayoutConstraint!
 
+    private var container: NSView!
+    private var backgroundView: NSVisualEffectView?
+    private var backgroundLayer: CALayer?
+
     private let slideDistance: CGFloat = 12
-    private let animationDuration: TimeInterval = 0.3
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
+        let theme = ThemeManager.shared.theme
         let screen = NSScreen.main ?? NSScreen.screens[0]
-        let width: CGFloat = 800
-        let height: CGFloat = 90
-        let x = (screen.frame.width - width) / 2
-        let y: CGFloat = 120
+        let size = NSSize(width: theme.overlayWidth, height: 90)
+        let origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
 
         super.init(
-            contentRect: NSRect(x: x, y: y, width: width, height: height),
+            contentRect: NSRect(origin: origin, size: size),
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -37,12 +40,20 @@ class OverlayWindow: NSWindow {
         self.isMovableByWindowBackground = false
 
         setupContent()
+        applyTheme(theme)
+        observeTheme()
     }
 
-    private func makeLyricLabel(size: CGFloat, weight: NSFont.Weight, alpha: CGFloat = 1.0) -> NSTextField {
-        let label = NSTextField(labelWithString: "")
-        label.font = NSFont.systemFont(ofSize: size, weight: weight)
-        label.textColor = NSColor.white.withAlphaComponent(alpha)
+    private func observeTheme() {
+        ThemeManager.shared.$theme
+            .receive(on: RunLoop.main)
+            .sink { [weak self] theme in
+                self?.applyTheme(theme)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func configureLabel(_ label: NSTextField) {
         label.alignment = .center
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
@@ -51,100 +62,153 @@ class OverlayWindow: NSWindow {
         label.isEditable = false
         label.isSelectable = false
         label.wantsLayer = true
-        label.shadow = {
-            let s = NSShadow()
-            s.shadowColor = NSColor.black.withAlphaComponent(0.8)
-            s.shadowBlurRadius = 4
-            s.shadowOffset = NSSize(width: 0, height: -1)
-            return s
-        }()
         label.translatesAutoresizingMaskIntoConstraints = false
-        return label
     }
 
     private func setupContent() {
-        let container = NSView(frame: contentView!.bounds)
+        container = NSView(frame: contentView!.bounds)
         container.autoresizingMask = [.width, .height]
         container.wantsLayer = true
 
-        // Configure label A (starts visible)
-        let labelA = currentLabelA
-        labelA.font = NSFont.systemFont(ofSize: 24, weight: .bold)
-        labelA.textColor = .white
-        labelA.alignment = .center
-        labelA.maximumNumberOfLines = 1
-        labelA.lineBreakMode = .byTruncatingTail
-        labelA.isBezeled = false
-        labelA.drawsBackground = false
-        labelA.isEditable = false
-        labelA.isSelectable = false
-        labelA.wantsLayer = true
-        labelA.shadow = {
-            let s = NSShadow()
-            s.shadowColor = NSColor.black.withAlphaComponent(0.8)
-            s.shadowBlurRadius = 4
-            s.shadowOffset = NSSize(width: 0, height: -1)
-            return s
-        }()
-        labelA.translatesAutoresizingMaskIntoConstraints = false
-        labelA.alphaValue = 1
+        configureLabel(currentLabelA)
+        currentLabelA.alphaValue = 1
+        configureLabel(currentLabelB)
+        currentLabelB.alphaValue = 0
+        configureLabel(nextLyricLabel)
 
-        // Configure label B (starts hidden, positioned below)
-        let labelB = currentLabelB
-        labelB.font = labelA.font
-        labelB.textColor = labelA.textColor
-        labelB.alignment = labelA.alignment
-        labelB.maximumNumberOfLines = 1
-        labelB.lineBreakMode = .byTruncatingTail
-        labelB.isBezeled = false
-        labelB.drawsBackground = false
-        labelB.isEditable = false
-        labelB.isSelectable = false
-        labelB.wantsLayer = true
-        labelB.shadow = labelA.shadow
-        labelB.translatesAutoresizingMaskIntoConstraints = false
-        labelB.alphaValue = 0
+        container.addSubview(currentLabelA)
+        container.addSubview(currentLabelB)
+        container.addSubview(nextLyricLabel)
 
-        // Next line label
-        let nextLabel = nextLyricLabel
-        nextLabel.font = NSFont.systemFont(ofSize: 16, weight: .medium)
-        nextLabel.textColor = NSColor.white.withAlphaComponent(0.5)
-        nextLabel.alignment = .center
-        nextLabel.maximumNumberOfLines = 1
-        nextLabel.lineBreakMode = .byTruncatingTail
-        nextLabel.isBezeled = false
-        nextLabel.drawsBackground = false
-        nextLabel.isEditable = false
-        nextLabel.isSelectable = false
-        nextLabel.wantsLayer = true
-        nextLabel.shadow = labelA.shadow
-        nextLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        container.addSubview(labelA)
-        container.addSubview(labelB)
-        container.addSubview(nextLabel)
-
-        currentTopA = labelA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
-        currentTopB = labelB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
+        currentTopA = currentLabelA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
+        currentTopB = currentLabelB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
 
         NSLayoutConstraint.activate([
-            labelA.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            labelA.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            currentLabelA.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            currentLabelA.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             currentTopA,
 
-            labelB.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            labelB.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            currentLabelB.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            currentLabelB.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             currentTopB,
 
-            nextLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            nextLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            nextLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 44),
+            nextLyricLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            nextLyricLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            nextLyricLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 44),
         ])
 
         contentView = container
     }
 
+    // MARK: - Theme Application
+
+    func applyTheme(_ theme: Theme) {
+        let shadow = theme.textShadow
+
+        for label in [currentLabelA, currentLabelB] {
+            label.font = theme.currentLineFont
+            label.textColor = theme.textColor
+            label.shadow = shadow
+            label.layer?.setAffineTransform(.identity)
+            // Apply or clear letter spacing
+            let str = NSMutableAttributedString(string: label.stringValue)
+            if theme.letterSpacing != 0 {
+                str.addAttribute(.kern, value: theme.letterSpacing, range: NSRange(location: 0, length: str.length))
+            }
+            label.attributedStringValue = str
+        }
+
+        nextLyricLabel.font = theme.nextLineFont
+        nextLyricLabel.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
+        nextLyricLabel.shadow = shadow
+
+        applyBackground(theme)
+        applyPosition(theme)
+    }
+
+    private func applyBackground(_ theme: Theme) {
+        backgroundView?.removeFromSuperview()
+        backgroundView = nil
+        backgroundLayer?.removeFromSuperlayer()
+        backgroundLayer = nil
+
+        switch theme.backgroundStyle {
+        case .none:
+            break
+
+        case .frostedPill:
+            // Native macOS frosted glass using NSVisualEffectView
+            let effect = NSVisualEffectView(frame: container.bounds)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.wantsLayer = true
+            effect.layer?.cornerRadius = theme.backgroundCornerRadius
+            effect.layer?.masksToBounds = true
+            effect.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            NSLayoutConstraint.activate([
+                effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                effect.topAnchor.constraint(equalTo: container.topAnchor),
+                effect.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            backgroundView = effect
+
+        case .solidPill:
+            // Simple semi-transparent solid color
+            let bg = NSView(frame: container.bounds)
+            bg.wantsLayer = true
+            bg.layer?.backgroundColor = theme.backgroundColor.cgColor
+            bg.layer?.cornerRadius = theme.backgroundCornerRadius
+            bg.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(bg, positioned: .below, relativeTo: currentLabelA)
+            NSLayoutConstraint.activate([
+                bg.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                bg.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                bg.topAnchor.constraint(equalTo: container.topAnchor),
+                bg.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            backgroundLayer = bg.layer
+
+        case .bar:
+            // Full-width frosted bar
+            let effect = NSVisualEffectView(frame: container.bounds)
+            effect.material = .hudWindow
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            NSLayoutConstraint.activate([
+                effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                effect.topAnchor.constraint(equalTo: container.topAnchor),
+                effect.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+            backgroundView = effect
+        }
+    }
+
+    private func applyPosition(_ theme: Theme) {
+        guard theme.overlayPosition != .custom else { return }
+        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
+        let newSize = NSSize(width: width, height: 90)
+        let origin: NSPoint
+        if theme.backgroundStyle == .bar {
+            // Bar spans full screen width at the overlay's vertical position
+            let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+            origin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
+        } else {
+            origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+        }
+        setFrame(NSRect(origin: origin, size: newSize), display: true)
+    }
+
+    // MARK: - Lyrics Display
+
     func updateLyrics(current: String, next: String) {
+        let theme = ThemeManager.shared.theme
         let activeLabel = useA ? currentLabelA : currentLabelB
         let incomingLabel = useA ? currentLabelB : currentLabelA
         let activeTop = useA ? currentTopA! : currentTopB!
@@ -152,50 +216,95 @@ class OverlayWindow: NSWindow {
 
         let restY: CGFloat = 8
 
-        // Only animate when the current line actually changes
         if activeLabel.stringValue != current {
-            // Prepare incoming label: place it below, invisible, with new text
             incomingLabel.stringValue = current
-            incomingLabel.alphaValue = 0
-            incomingTop.constant = restY + slideDistance
-            contentView?.layoutSubtreeIfNeeded()
 
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = animationDuration
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                context.allowsImplicitAnimation = true
-
-                // Old label: slide up + fade out
-                activeTop.constant = restY - slideDistance
-                activeLabel.animator().alphaValue = 0
-
-                // New label: slide up to center + fade in
+            switch theme.transitionStyle {
+            case .none:
+                activeLabel.alphaValue = 0
+                incomingLabel.alphaValue = 1
+                activeTop.constant = restY
                 incomingTop.constant = restY
-                incomingLabel.animator().alphaValue = 1
 
+            case .crossfade:
+                incomingLabel.alphaValue = 0
+                incomingTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = theme.animationDuration
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    activeLabel.animator().alphaValue = 0
+                    incomingLabel.animator().alphaValue = 1
+                }
+
+            case .slideUp:
+                incomingLabel.alphaValue = 0
+                incomingTop.constant = restY + slideDistance
+                contentView?.layoutSubtreeIfNeeded()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = theme.animationDuration
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    ctx.allowsImplicitAnimation = true
+                    activeTop.constant = restY - slideDistance
+                    activeLabel.animator().alphaValue = 0
+                    incomingTop.constant = restY
+                    incomingLabel.animator().alphaValue = 1
+                    contentView?.layoutSubtreeIfNeeded()
+                }
+
+            case .scaleFade:
+                incomingLabel.alphaValue = 0
+                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.95, y: 0.95))
+                incomingTop.constant = restY
+                contentView?.layoutSubtreeIfNeeded()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = theme.animationDuration
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    ctx.allowsImplicitAnimation = true
+                    activeLabel.animator().alphaValue = 0
+                    activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.95, y: 0.95))
+                    incomingLabel.animator().alphaValue = 1
+                    incomingLabel.layer?.setAffineTransform(.identity)
+                } completionHandler: {
+                    activeLabel.layer?.setAffineTransform(.identity)
+                }
+
+            case .push:
+                incomingLabel.alphaValue = 1
+                incomingTop.constant = restY + slideDistance * 2
+                contentView?.layoutSubtreeIfNeeded()
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = theme.animationDuration
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                    ctx.allowsImplicitAnimation = true
+                    activeTop.constant = restY - slideDistance * 2
+                    incomingTop.constant = restY
+                    contentView?.layoutSubtreeIfNeeded()
+                } completionHandler: {
+                    activeLabel.alphaValue = 0
+                }
             }
 
             useA.toggle()
         }
 
         if nextLyricLabel.stringValue != next {
-            // Subtle crossfade for next line
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 nextLyricLabel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                self?.nextLyricLabel.stringValue = next
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = 0.2
-                    self?.nextLyricLabel.animator().alphaValue = 0.5
+                guard let self else { return }
+                self.nextLyricLabel.stringValue = next
+                let opacity = ThemeManager.shared.theme.nextLineOpacity
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.2
+                    self.nextLyricLabel.animator().alphaValue = opacity
                 }
             }
         }
     }
 
-    /// Show track metadata during intro (before first lyric line)
     func showTrackInfo(title: String, artist: String) {
         updateLyrics(current: title, next: artist)
     }

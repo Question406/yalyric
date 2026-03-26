@@ -1,10 +1,12 @@
 import AppKit
+import Combine
 
 class DesktopWidget: NSWindow {
     private let stackView = NSStackView()
     private var lineLabels: [NSTextField] = []
     private let visibleLines = 5
-    private let currentHighlightIndex = 2  // middle line
+    private let currentHighlightIndex = 2
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -28,6 +30,17 @@ class DesktopWidget: NSWindow {
         self.ignoresMouseEvents = true
 
         setupContent()
+        applyTheme(ThemeManager.shared.theme)
+        observeTheme()
+    }
+
+    private func observeTheme() {
+        ThemeManager.shared.$theme
+            .receive(on: RunLoop.main)
+            .sink { [weak self] theme in
+                self?.applyTheme(theme)
+            }
+            .store(in: &cancellables)
     }
 
     private func setupContent() {
@@ -43,14 +56,8 @@ class DesktopWidget: NSWindow {
         stackView.spacing = 6
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
-        for i in 0..<visibleLines {
+        for _ in 0..<visibleLines {
             let label = NSTextField(labelWithString: "")
-            label.font = (i == currentHighlightIndex)
-                ? NSFont.systemFont(ofSize: 16, weight: .bold)
-                : NSFont.systemFont(ofSize: 14, weight: .regular)
-            label.textColor = (i == currentHighlightIndex)
-                ? .white
-                : NSColor.white.withAlphaComponent(0.4)
             label.alignment = .center
             label.maximumNumberOfLines = 1
             label.lineBreakMode = .byTruncatingTail
@@ -72,13 +79,33 @@ class DesktopWidget: NSWindow {
         contentView = container
     }
 
+    private func applyTheme(_ theme: Theme) {
+        for (i, label) in lineLabels.enumerated() {
+            if i == currentHighlightIndex {
+                label.font = theme.currentLineFont
+                label.textColor = theme.textColor
+            } else {
+                label.font = theme.nextLineFont
+                label.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
+            }
+        }
+    }
+
     func updateLyrics(lines: [LyricLine], currentIndex: Int) {
+        let theme = ThemeManager.shared.theme
         for i in 0..<visibleLines {
             let lineIndex = currentIndex - currentHighlightIndex + i
             if lineIndex >= 0 && lineIndex < lines.count {
                 lineLabels[i].stringValue = lines[lineIndex].text
             } else {
                 lineLabels[i].stringValue = ""
+            }
+            if i == currentHighlightIndex {
+                lineLabels[i].font = theme.currentLineFont
+                lineLabels[i].textColor = theme.textColor
+            } else {
+                lineLabels[i].font = theme.nextLineFont
+                lineLabels[i].textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
             }
         }
     }
