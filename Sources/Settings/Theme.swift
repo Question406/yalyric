@@ -67,6 +67,7 @@ struct Theme: Equatable {
             && lhs.backgroundStyle == rhs.backgroundStyle
             && lhs.backgroundColor.description == rhs.backgroundColor.description
             && lhs.backgroundCornerRadius == rhs.backgroundCornerRadius
+            && lhs.backgroundOpacity == rhs.backgroundOpacity
             && lhs.transitionStyle == rhs.transitionStyle
             && lhs.animationDuration == rhs.animationDuration
             && lhs.overlayPosition == rhs.overlayPosition
@@ -92,6 +93,7 @@ struct Theme: Equatable {
     var backgroundStyle: BackgroundStyle = .none
     var backgroundColor: NSColor = NSColor.black.withAlphaComponent(0.25)
     var backgroundCornerRadius: CGFloat = 12
+    var backgroundOpacity: CGFloat = 0.5
 
     // Animation
     var transitionStyle: TransitionStyle = .slideUp
@@ -156,6 +158,7 @@ class ThemeManager: ObservableObject {
             t.shadowBlurRadius = 12
             t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor.black.withAlphaComponent(0.35)
+            t.backgroundOpacity = 0.5
             return t
         }()),
         ("Minimal", {
@@ -175,6 +178,7 @@ class ThemeManager: ObservableObject {
             t.overlayPosition = .center
             t.backgroundStyle = .bar
             t.backgroundColor = NSColor.black.withAlphaComponent(0.3)
+            t.backgroundOpacity = 0.4
             return t
         }()),
         ("Spotify", {
@@ -183,6 +187,7 @@ class ThemeManager: ObservableObject {
             t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor(red: 0.07, green: 0.07, blue: 0.07, alpha: 0.5)
             t.backgroundCornerRadius = 8
+            t.backgroundOpacity = 0.6
             return t
         }()),
         ("Terminal", {
@@ -195,6 +200,7 @@ class ThemeManager: ObservableObject {
             t.transitionStyle = .none
             t.backgroundStyle = .frostedPill
             t.backgroundColor = NSColor.black.withAlphaComponent(0.45)
+            t.backgroundOpacity = 0.7
             t.letterSpacing = 1
             return t
         }()),
@@ -224,6 +230,7 @@ class ThemeManager: ObservableObject {
         d.set(theme.transitionStyle.rawValue, forKey: "theme.transitionStyle")
         d.set(theme.backgroundStyle.rawValue, forKey: "theme.backgroundStyle")
         d.set(Double(theme.backgroundCornerRadius), forKey: "theme.backgroundCornerRadius")
+        d.set(Double(theme.backgroundOpacity), forKey: "theme.backgroundOpacity")
         d.set(theme.animationDuration, forKey: "theme.animationDuration")
         d.set(theme.overlayPosition.rawValue, forKey: "theme.overlayPosition")
         d.set(Double(theme.overlayWidth), forKey: "theme.overlayWidth")
@@ -270,6 +277,8 @@ class ThemeManager: ObservableObject {
 
         let cr = d.double(forKey: "theme.backgroundCornerRadius")
         if cr > 0 { t.backgroundCornerRadius = CGFloat(cr) }
+        let bo = d.double(forKey: "theme.backgroundOpacity")
+        if bo > 0 { t.backgroundOpacity = CGFloat(bo) }
         let dur = d.double(forKey: "theme.animationDuration")
         if dur > 0 { t.animationDuration = dur }
         if let raw = d.string(forKey: "theme.overlayPosition"),

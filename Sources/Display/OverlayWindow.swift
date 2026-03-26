@@ -141,6 +141,7 @@ class OverlayWindow: NSWindow {
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow
             effect.state = .active
+            effect.alphaValue = theme.backgroundOpacity
             effect.wantsLayer = true
             effect.layer?.cornerRadius = theme.backgroundCornerRadius
             effect.layer?.masksToBounds = true
@@ -159,6 +160,7 @@ class OverlayWindow: NSWindow {
             bg.wantsLayer = true
             bg.layer?.backgroundColor = theme.backgroundColor.cgColor
             bg.layer?.cornerRadius = theme.backgroundCornerRadius
+            bg.alphaValue = theme.backgroundOpacity
             bg.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(bg, positioned: .below, relativeTo: currentLabelA)
             NSLayoutConstraint.activate([
@@ -174,6 +176,7 @@ class OverlayWindow: NSWindow {
             effect.material = .hudWindow
             effect.blendingMode = .behindWindow
             effect.state = .active
+            effect.alphaValue = theme.backgroundOpacity
             effect.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
             NSLayoutConstraint.activate([

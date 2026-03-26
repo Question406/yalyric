@@ -234,6 +234,15 @@ struct AppearanceTab: View {
                             themeManager.theme.backgroundColor = NSColor(newValue)
                         }
                 }
+                if themeManager.theme.backgroundStyle != .none {
+                    LabeledSlider(
+                        label: "Opacity",
+                        value: $themeManager.theme.backgroundOpacity,
+                        range: 0.0...1.0,
+                        format: "%.0f%%",
+                        displayMultiplier: 100
+                    )
+                }
                 if themeManager.theme.backgroundStyle == .frostedPill || themeManager.theme.backgroundStyle == .solidPill {
                     LabeledSlider(
                         label: "Corner radius",
