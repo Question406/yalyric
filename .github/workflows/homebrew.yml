@@ -1,22 +1,26 @@
 name: Update Homebrew Cask
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 jobs:
   update-cask:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Get release info
+      - name: Get latest release info
         id: release
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
+          # Fetch the latest release from the API
+          RELEASE=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}")
+          VERSION=$(echo "$RELEASE" | jq -r '.tag_name')
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Get the zip URL and SHA256
-          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/yalyric-v${VERSION}-macos.zip"
+          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/yalyric-v${VERSION}-macos.zip"
           echo "url=$ZIP_URL" >> "$GITHUB_OUTPUT"
 
           curl -sL "$ZIP_URL" -o yalyric.zip
