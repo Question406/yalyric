@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.2
+
+### Fixed
+- Overlay position drift on repeated line changes (track target width instead of in-flight animated frame width)
+
 ## v0.2.1
 
 ### Fixed
