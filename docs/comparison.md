@@ -7,6 +7,8 @@
 | App | Status | macOS | Sources | Display Modes | Word Karaoke | Stars |
 |-----|--------|-------|---------|---------------|-------------|-------|
 | **yalyric** | Active | 13+ | 4 (parallel) | Overlay, Widget, Menu Bar | Line-level | New |
+
+**Players:** Spotify + Apple Music (auto-detect). LyricsX fork and LyricFever also support multiple players.
 | **LyricsX** (original) | Abandoned (2022) | 10.11+ | ~6 (many broken) | Desktop, Menu Bar, Touch Bar | Word-level | 5.1K |
 | **LyricsX** (MxIris fork) | Active | 11+ | 8 (added LRCLIB, Musixmatch) | Desktop, Menu Bar | Word-level | — |
 | **LyricFever** | Active | **15+** | 3 | Menu Bar, Fullscreen, Popup | Word-level | 551 |
@@ -27,7 +29,7 @@
 ## yalyric Gaps (vs competition)
 
 - **No word-level karaoke** — only line-level gradient fill (Level 2 planned, Spotify API has the data)
-- **No Apple Music support** — Spotify only (AppleScript bridge planned)
+- ~~No Apple Music support~~ — **Done!** Auto-detects Spotify and Apple Music
 - **No click-to-seek** — can't click a lyric line to jump to that timestamp
 - **No local .lrc import/export** — planned
 - **No code signing** — requires `xattr -cr` on first launch
@@ -54,5 +56,5 @@ Key message: "LyricsX is broken on modern macOS. yalyric is a fresh, native alte
 1. Screenshots/GIF — nothing else matters for promotion without visuals
 2. v0.2.0 release tag — proper .app bundle signals maturity
 3. Word-level karaoke (Level 2) — the "wow" feature for screenshots
-4. Apple Music support — doubles the audience
+4. ~~Apple Music support~~ — **Done!**
 5. Code signing — removes the `xattr` friction

@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Apple Music support — auto-detects active player, seamless switching with Spotify
+- PlayerBridge architecture — protocol + base class for extensible player integrations
+- TOML config file support — `~/.config/yalyric/config.toml` (optional, power users)
+- AppConfig centralized configuration layer with typed keys
 - Karaoke fill effect — gradient sweep across current line in sync with music
 - Parallel provider fetching with scoring (synced + language + line count)
 - Shared search validation across all providers (name/artist/duration matching)

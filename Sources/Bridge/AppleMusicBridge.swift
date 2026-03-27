@@ -1,31 +1,31 @@
 import AppKit
 
 @MainActor
-final class SpotifyBridge: AppleScriptBridge, PlayerBridge {
-    override var playerName: String { "Spotify" }
+final class AppleMusicBridge: AppleScriptBridge, PlayerBridge {
+    override var playerName: String { "Apple Music" }
 
     override nonisolated var compiledScript: NSAppleScript? { Self._compiledScript }
 
     private nonisolated(unsafe) static let _compiledScript: NSAppleScript? = {
         let source = """
-        if application "Spotify" is running then
-            tell application "Spotify"
+        if application "Music" is running then
+            tell application "Music"
                 if player state is playing then
-                    set trackID to id of current track
+                    set trackID to database ID of current track
                     set trackName to name of current track
                     set trackArtist to artist of current track
                     set trackAlbum to album of current track
                     set trackDuration to duration of current track
                     set playerPos to player position
-                    return trackID & "||" & trackName & "||" & trackArtist & "||" & trackAlbum & "||" & (trackDuration as text) & "||" & (playerPos as text) & "||playing"
+                    return (trackID as text) & "||" & trackName & "||" & trackArtist & "||" & trackAlbum & "||" & (trackDuration as text) & "||" & (playerPos as text) & "||playing"
                 else if player state is paused then
-                    set trackID to id of current track
+                    set trackID to database ID of current track
                     set trackName to name of current track
                     set trackArtist to artist of current track
                     set trackAlbum to album of current track
                     set trackDuration to duration of current track
                     set playerPos to player position
-                    return trackID & "||" & trackName & "||" & trackArtist & "||" & trackAlbum & "||" & (trackDuration as text) & "||" & (playerPos as text) & "||paused"
+                    return (trackID as text) & "||" & trackName & "||" & trackArtist & "||" & trackAlbum & "||" & (trackDuration as text) & "||" & (playerPos as text) & "||paused"
                 else
                     return "stopped"
                 end if
@@ -47,27 +47,25 @@ final class SpotifyBridge: AppleScriptBridge, PlayerBridge {
         let name = parts[1]
         let artist = parts[2]
         let album = parts[3]
-        let durationMs = Double(parts[4]) ?? 0
+        let duration = Double(parts[4]) ?? 0  // Apple Music returns seconds (not ms)
         let position = Double(parts[5]) ?? 0
         let state = parts[6]
 
         isPlaying = (state == "playing")
         playbackPosition = position
 
-        // Filter non-music content: DJ interludes, podcasts, ads
-        if !trackID.hasPrefix("spotify:track:") || durationMs <= 0 {
+        guard duration > 0 else {
             currentTrack = nil
-            nonMusicTitle = name
             return
         }
         nonMusicTitle = nil
 
         let track = TrackInfo(
-            id: trackID,
+            id: "applemusic:\(trackID)",
             name: name,
             artist: artist,
             album: album,
-            duration: durationMs / 1000.0
+            duration: duration  // already in seconds
         )
         currentTrack = track
     }

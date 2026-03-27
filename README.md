@@ -1,6 +1,6 @@
 <p align="center">
   <h1 align="center">yalyric</h1>
-  <p align="center"><b>Yet Another Lyric</b> — real-time Spotify lyrics on your macOS desktop</p>
+  <p align="center"><b>Yet Another Lyric</b> — real-time Spotify & Apple Music lyrics on your macOS desktop</p>
 </p>
 
 <p align="center">
@@ -13,7 +13,7 @@
 
 <!-- TODO: Add a GIF showing lyrics syncing across display modes -->
 
-A native macOS app that syncs Spotify lyrics to your desktop. Lightweight, no Electron, no web views. Inspired by [LyricsX](https://github.com/ddddxxx/LyricsX).
+A native macOS app that syncs lyrics from Spotify and Apple Music to your desktop. Auto-detects which player is active. Lightweight, no Electron, no web views. Inspired by [LyricsX](https://github.com/ddddxxx/LyricsX).
 
 ## Features
 
@@ -23,7 +23,8 @@ A native macOS app that syncs Spotify lyrics to your desktop. Lightweight, no El
 - **Six theme presets** — Classic, Neon, Minimal, Karaoke, Spotify, Terminal, plus full customization
 - **Five transition styles** — slide up, crossfade, scale fade, push, or none
 - **Draggable positioning** — move the overlay and widget anywhere on screen
-- **Auto-hide** — overlay fades out when Spotify is paused
+- **Spotify + Apple Music** — auto-detects which player is active, seamless switching
+- **Auto-hide** — overlay fades out when music is paused
 - **Language filtering** — auto-detects song language, filters mismatched lyrics
 - **Manual offset** — adjust lyrics timing with +/- buttons
 - **Disk cache** — instant lyrics on songs you've played before
@@ -66,7 +67,7 @@ Or build the .app bundle:
 ## Quick Start
 
 1. Launch yalyric — a **music note icon** appears in your menu bar
-2. Play a song in Spotify — lyrics appear automatically
+2. Play a song in Spotify or Apple Music — lyrics appear automatically
 3. **Left-click** the menu bar icon to see the full lyrics popover
 4. **Right-click** for Settings, Move Overlay, and Quit
 5. First launch shows a welcome message; subsequent launches go straight to lyrics
@@ -86,7 +87,7 @@ All four providers are queried in parallel. The best result wins based on scorin
 | Source | Auth | Best For |
 |---|---|---|
 | [LRCLIB](https://lrclib.net) | None | English/Western music. Free, open API. |
-| Spotify Internal | SP_DC cookie | Exact match with Spotify's own lyrics. |
+| Spotify Internal | SP_DC cookie | Exact match with Spotify's own lyrics. Spotify tracks only. |
 | Musixmatch | Auto-token | Large synced subtitle database. |
 | NetEase Cloud Music | None | CJK (Chinese/Japanese/Korean) music. |
 
@@ -116,7 +117,7 @@ Three tabs: **General**, **Appearance**, and **Sources**.
 ## FAQ
 
 **Does it work with Apple Music?**
-Not yet. Currently Spotify-only via AppleScript. Apple Music support is planned.
+Yes! yalyric auto-detects whether Spotify or Apple Music is playing and syncs lyrics from whichever is active. If both are playing, Spotify takes priority. Note: the Spotify Internal lyrics source only works with Spotify tracks — Apple Music tracks use the other three providers (LRCLIB, Musixmatch, NetEase).
 
 **Why does it say "yalyric is damaged"?**
 macOS quarantines unsigned apps. Run `xattr -cr /Applications/yalyric.app` to fix it. This is safe — the app is open source and you can verify the code.
@@ -133,7 +134,7 @@ Yes. Lyrics sync to whatever track is currently playing. DJ transition interlude
 ## System Requirements
 
 - macOS 13 (Ventura) or later
-- Spotify desktop app (not the web player)
+- Spotify desktop app and/or Apple Music
 
 ## Testing
 
@@ -141,7 +142,7 @@ Yes. Lyrics sync to whatever track is currently playing. DJ transition interlude
 swift test
 ```
 
-63 tests across 5 suites covering LRC parsing, lyrics scoring, sync engine, offset, theme equality, and gradient calculations.
+71 tests across 6 suites covering LRC parsing, lyrics scoring, sync engine, offset, theme equality, TOML parsing, and gradient calculations.
 
 ## Contributing
 
@@ -150,8 +151,8 @@ Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup inst
 Check the [roadmap](docs/plans/roadmap.md) for planned features, or look for issues labeled `good first issue`.
 
 Some areas that would benefit from help:
-- Apple Music support
 - Keyboard shortcuts
+- Word-level karaoke (Level 2)
 - Local .lrc file support
 - Album art color extraction
 

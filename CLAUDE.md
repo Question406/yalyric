@@ -15,7 +15,7 @@ The app appears as a music note icon in the menu bar. Needs Spotify desktop app 
 
 ## Architecture
 
-yalyric is a native macOS menu bar app (Swift/AppKit, SPM, no external dependencies) that syncs Spotify lyrics to the desktop.
+yalyric is a native macOS menu bar app (Swift/AppKit, SPM, no external dependencies) that syncs Spotify and Apple Music lyrics to the desktop.
 
 ### Target Split
 
@@ -26,7 +26,8 @@ yalyric is a native macOS menu bar app (Swift/AppKit, SPM, no external dependenc
 ### Data Flow
 
 ```
-SpotifyBridge (AppleScript poll 0.5s/2s)
+PlayerManager (auto-detects Spotify / Apple Music)
+    ↓ SpotifyBridge + AppleMusicBridge (AppleScript poll 0.5s/2s each)
     ↓ $currentTrack, $isPlaying, $playbackPosition (Combine @Published)
 AppDelegate (wires everything via Combine .sink)
     ↓ track change → LyricsManager.fetchLyrics(for:)
@@ -41,7 +42,11 @@ OverlayWindow / DesktopWidget / MenuBarController
 
 ### Key Components
 
-- **SpotifyBridge**: Adaptive polling (0.5s playing, 2s idle), pre-compiled AppleScript on background queue, 3s timeout protection. Filters non-music content (`spotify:track:` prefix required).
+- **PlayerManager**: Auto-detects active player (Spotify or Apple Music), forwards unified stream. Prefers Spotify when both are playing.
+
+- **AppleScriptBridge** (base class): Adaptive polling (0.5s playing, 2s idle), pre-compiled script, dedicated serial scriptQueue, 3s timeout. SpotifyBridge and AppleMusicBridge inherit from it. Adding a new player = subclass + override `compiledScript` and `parseResult`.
+
+- **SpotifyBridge**: Filters non-music content (`spotify:track:` prefix). Duration in ms. **AppleMusicBridge**: Uses `database ID`. Duration in seconds.
 
 - **LyricsManager**: Queries all 4 providers concurrently via `withTaskGroup`. Scoring: synced(+3), langMatch(+1), lines>5(+1). Early return on perfect score. Two-tier cache: LRU memory (50) + disk JSON (200).
 

@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
-    private let spotifyBridge = SpotifyBridge()
+    private let playerManager = PlayerManager()
     private let lyricsManager = LyricsManager()
     private let syncEngine = SyncEngine()
 
@@ -32,7 +32,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupBindings()
         showOnboardingIfNeeded()
         syncEngine.offset = SettingsManager.shared.lyricsOffset
-        spotifyBridge.startPolling()
+        playerManager.startPolling()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayModesDidChange),
@@ -132,7 +132,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func setupBindings() {
         // When track changes, fetch lyrics
-        spotifyBridge.$currentTrack
+        playerManager.$currentTrack
             .removeDuplicates()
             .sink { [weak self] track in
                 guard let self, let track else {
@@ -158,7 +158,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .store(in: &cancellables)
 
         // When playback position changes, update sync
-        spotifyBridge.$playbackPosition
+        playerManager.$playbackPosition
             .sink { [weak self] position in
                 guard let self else { return }
                 self.syncEngine.update(position: position)
@@ -175,7 +175,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .store(in: &cancellables)
 
         // React to playing state — auto-hide overlay when paused
-        spotifyBridge.$isPlaying
+        playerManager.$isPlaying
             .dropFirst()  // skip initial false at launch
             .removeDuplicates()
             .sink { [weak self] playing in
@@ -256,13 +256,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let nextLine = syncEngine.nextLine
         let index = syncEngine.currentLineIndex
         let lines = syncEngine.allLines
-        let track = spotifyBridge.currentTrack
+        let track = playerManager.currentTrack
 
         // Determine current display state
         let state: DisplayState
-        if spotifyBridge.permissionDenied {
+        if playerManager.permissionDenied {
             state = .permissionDenied
-        } else if track == nil && spotifyBridge.nonMusicTitle != nil {
+        } else if track == nil && playerManager.nonMusicTitle != nil {
             state = .nonMusic
         } else if track == nil {
             state = .noTrack
@@ -270,7 +270,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             state = .loading
         } else if lyricsManager.errorMessage != nil {
             state = .noLyrics
-        } else if index == -1 && spotifyBridge.isPlaying {
+        } else if index == -1 && playerManager.isPlaying {
             state = .intro
         } else {
             state = .lyrics
@@ -284,7 +284,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastDisplayState = state
         lastDisplayedLineIndex = index
 
-        if spotifyBridge.permissionDenied {
+        if playerManager.permissionDenied {
             overlayWindow?.updateSource(nil)
             overlayWindow?.showTrackInfo(
                 title: "Automation permission needed",
@@ -294,7 +294,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        if let nonMusicTitle = spotifyBridge.nonMusicTitle, track == nil {
+        if let nonMusicTitle = playerManager.nonMusicTitle, track == nil {
             // Podcast, DJ interlude, or ad — hide overlay, show title in menu bar
             overlayWindow?.updateSource(nil)
             overlayWindow?.updateLyrics(current: "", next: "")
@@ -331,7 +331,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        if index == -1 && spotifyBridge.isPlaying {
+        if index == -1 && playerManager.isPlaying {
             // Before first lyric line (intro) — show track info
             let firstLine = lines.first?.text ?? ""
             overlayWindow?.showTrackInfo(
@@ -354,13 +354,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
         desktopWidget?.updateProgress(syncEngine.progress)
 
-        if spotifyBridge.isPlaying {
+        if playerManager.isPlaying {
             menuBarController?.updateCurrentLine(currentLine, isSynced: isSynced)
         }
         menuBarController?.updateLyrics(lines: lines, currentIndex: index)
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
-        spotifyBridge.stopPolling()
+        playerManager.stopPolling()
     }
 }

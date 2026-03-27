@@ -4,6 +4,9 @@ public struct SpotifyInternalProvider: LyricsProvider {
     public let source: LyricsSource = .spotify
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
+        // Only works for Spotify tracks (needs spotify:track: ID)
+        guard track.id.hasPrefix("spotify:track:") else { return nil }
+
         let cookie = AppConfig.get(AppConfig.Sources.spDCCookie)
         guard !cookie.isEmpty else { return nil }
 

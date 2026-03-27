@@ -28,7 +28,7 @@ The app appears as a music note in your menu bar. Play a song in Spotify to veri
 swift test
 ```
 
-63 tests across 5 suites. All tests must pass before submitting a PR.
+71 tests across 6 suites. All tests must pass before submitting a PR.
 
 ### Debug Logs
 
@@ -44,8 +44,9 @@ Log lines are prefixed with `[yalyric]` for easy filtering.
 
 ```
 Sources/
-  App/          — AppDelegate, Logger
-  Bridge/       — SpotifyBridge (AppleScript polling)
+  App/          — AppDelegate, AppConfig, Logger, TOMLParser
+  Bridge/       — PlayerManager, PlayerBridge, AppleScriptBridge,
+                  SpotifyBridge, AppleMusicBridge
   Lyrics/       — LyricsManager, LRCParser, Providers/
   Sync/         — SyncEngine (binary search timestamp matching)
   Display/      — OverlayWindow, DesktopWidget, MenuBarController
@@ -55,7 +56,10 @@ Tests/          — XCTest suites
 ```
 
 Key patterns:
+- **PlayerBridge protocol** — adding a new player = subclass `AppleScriptBridge`, override `compiledScript` and `parseResult`
+- **PlayerManager** — auto-detects active player, forwards unified stream to AppDelegate
 - **Combine** for reactive bindings between components
+- **AppConfig** — centralized typed keys with TOML override layer
 - **ThemeManager** singleton with `@Published` theme, debounced UserDefaults persistence
 - **Parallel provider fetching** with scoring — see `LyricsManager.swift`
 - **SearchMatchScore** for shared validation across providers — see `LyricsProvider.swift`
@@ -91,7 +95,7 @@ Open an issue describing the feature and why it's useful. Check `docs/plans/road
 
 Check issues labeled `good first issue` for beginner-friendly tasks. Some areas that would benefit from contributions:
 
-- **Apple Music support** — AppleScript integration similar to SpotifyBridge
+- **Additional player support** — Tidal, YouTube Music (subclass AppleScriptBridge or add new bridge type)
 - **Keyboard shortcuts** — global hotkeys via `CGEvent`
 - **Local .lrc file support** — drag & drop lyrics override
 - **Translations** — localize the settings UI
