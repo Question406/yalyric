@@ -33,14 +33,14 @@ jobs:
       - name: Write cask formula
         run: |
           mkdir -p homebrew-tap/Casks
-          cat > homebrew-tap/Casks/yalyric.rb << 'RUBY'
+          cat > homebrew-tap/Casks/yalyric.rb << RUBY
           cask "yalyric" do
             version "${{ steps.release.outputs.version }}"
             sha256 "${{ steps.release.outputs.sha256 }}"
 
             url "https://github.com/${{ github.repository }}/releases/download/v#{version}/yalyric-v#{version}-macos.zip"
             name "yalyric"
-            desc "Yet Another Lyric sync for Spotify on macOS"
+            desc "Real-time Spotify and Apple Music lyrics on macOS"
             homepage "https://github.com/${{ github.repository }}"
 
             depends_on macos: ">= :ventura"
@@ -49,6 +49,9 @@ jobs:
 
             zap trash: [
               "~/Library/Preferences/com.yalyric.app.plist",
+              "~/Library/Caches/yalyric",
+              "~/Library/Logs/yalyric.log",
+              "~/.config/yalyric",
             ]
           end
           RUBY
