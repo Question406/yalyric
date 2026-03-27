@@ -51,6 +51,10 @@ jobs:
 
             app "yalyric.app"
 
+            postflight do
+              system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/yalyric.app"]
+            end
+
             zap trash: [
               "~/Library/Preferences/com.yalyric.app.plist",
               "~/Library/Caches/yalyric",

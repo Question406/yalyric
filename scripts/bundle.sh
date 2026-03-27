@@ -57,6 +57,11 @@ cat > "${CONTENTS}/Info.plist" << EOF
 </plist>
 EOF
 
+# Ad-hoc code sign — allows macOS to verify the binary is untampered.
+# Not a full Developer ID signature, but Homebrew + xattr -cr will work.
+echo "Code signing (ad-hoc)..."
+codesign --force --deep --sign - "${BUNDLE_DIR}"
+
 echo "Creating zip for distribution..."
 cd dist
 zip -r -y "${APP_NAME}-v${VERSION}-macos.zip" "${APP_NAME}.app"
