@@ -15,8 +15,7 @@ public class LyricsManager: ObservableObject {
     ]
 
     private var orderedProviders: [LyricsProvider] {
-        let order = UserDefaults.standard.stringArray(forKey: "providerOrder")
-            ?? ["lrclib", "spotify", "musixmatch", "netease"]
+        let order = AppConfig.get(AppConfig.Sources.providerOrder)
         return order.compactMap { allProviders[$0] }
     }
 
@@ -154,8 +153,7 @@ public class LyricsManager: ObservableObject {
         isFetching = true
         errorMessage = nil
 
-        let langPref = UserDefaults.standard.string(forKey: "lyricsLanguage")
-            .flatMap { LyricsLanguagePreference(rawValue: $0) } ?? .auto
+        let langPref = LyricsLanguagePreference(rawValue: AppConfig.get(AppConfig.General.lyricsLanguage)) ?? .auto
         let providers = orderedProviders
         YalyricLog.info("[yalyric] Querying \(providers.count) providers in parallel...")
 

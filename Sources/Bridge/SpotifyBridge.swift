@@ -48,6 +48,7 @@ class SpotifyBridge: ObservableObject {
     }()
 
     private static let pollQueue = DispatchQueue(label: "com.yalyric.spotify-poll", qos: .userInitiated)
+    private nonisolated(unsafe) static let scriptQueue = DispatchQueue(label: "com.yalyric.spotify-script", qos: .userInitiated)
 
     func startPolling() {
         stopPolling()
@@ -73,14 +74,13 @@ class SpotifyBridge: ObservableObject {
     }
 
     private func poll() {
-        // Run AppleScript on a background queue with timeout protection
-        // If Spotify hangs/crashes, executeScript can block indefinitely
+        // Run AppleScript on a dedicated serial queue with timeout protection.
+        // Serial queue ensures only one script runs at a time (NSAppleScript is not thread-safe).
         Self.pollQueue.async { [weak self] in
             var output = "error"
             let semaphore = DispatchSemaphore(value: 0)
 
-            // Execute on a separate thread so we can timeout
-            DispatchQueue.global(qos: .userInitiated).async {
+            Self.scriptQueue.async {
                 output = Self.executeScript()
                 semaphore.signal()
             }

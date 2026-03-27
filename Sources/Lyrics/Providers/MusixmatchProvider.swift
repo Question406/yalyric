@@ -4,9 +4,12 @@ public struct MusixmatchProvider: LyricsProvider {
     public let source: LyricsSource = .musixmatch
 
     // Persisted to UserDefaults — Musixmatch captcha-blocks token re-auth after first request
-    private static var cachedToken: String? = UserDefaults.standard.string(forKey: "musixmatch.token")
+    private static var cachedToken: String? = {
+        let t = AppConfig.get(AppConfig.Sources.musixmatchToken)
+        return t.isEmpty ? nil : t
+    }()
     private static var tokenExpiry: Date? = {
-        let ts = UserDefaults.standard.double(forKey: "musixmatch.tokenExpiry")
+        let ts = AppConfig.get(AppConfig.Sources.musixmatchTokenExpiry)
         return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
     }()
 
@@ -60,8 +63,8 @@ public struct MusixmatchProvider: LyricsProvider {
         let expiry = Date().addingTimeInterval(3600)  // 1 hour — re-auth is captcha-blocked
         Self.cachedToken = token
         Self.tokenExpiry = expiry
-        UserDefaults.standard.set(token, forKey: "musixmatch.token")
-        UserDefaults.standard.set(expiry.timeIntervalSince1970, forKey: "musixmatch.tokenExpiry")
+        AppConfig.set(AppConfig.Sources.musixmatchToken, token)
+        AppConfig.set(AppConfig.Sources.musixmatchTokenExpiry, expiry.timeIntervalSince1970)
         return token
     }
 

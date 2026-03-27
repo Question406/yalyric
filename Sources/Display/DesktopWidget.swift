@@ -22,9 +22,9 @@ class DesktopWidget: NSWindow {
         let width: CGFloat = 400
         let height = CGFloat(visibleLines) * 36 + 32
         let origin: NSPoint
-        if UserDefaults.standard.bool(forKey: "widget.hasCustomPosition") {
-            let cx = CGFloat(UserDefaults.standard.double(forKey: "widget.customCenterX"))
-            let y = CGFloat(UserDefaults.standard.double(forKey: "widget.customY"))
+        if AppConfig.get(AppConfig.Widget.hasCustomPosition) {
+            let cx = CGFloat(AppConfig.get(AppConfig.Widget.customCenterX))
+            let y = CGFloat(AppConfig.get(AppConfig.Widget.customY))
             origin = NSPoint(x: cx - width / 2, y: y)
         } else {
             origin = NSPoint(x: screen.frame.width - width - 40, y: 100)
@@ -110,6 +110,7 @@ class DesktopWidget: NSWindow {
         guard count != visibleLines else { return }
         visibleLines = count
         currentHighlightIndex = count / 2
+        gradientMask = nil  // old mask is orphaned after rebuild
         rebuildLabels()
         applyTheme(ThemeManager.shared.theme)
 
@@ -261,9 +262,9 @@ class DesktopWidget: NSWindow {
     func lockPosition() {
         guard isEditMode else { return }
 
-        UserDefaults.standard.set(true, forKey: "widget.hasCustomPosition")
-        UserDefaults.standard.set(frame.midX, forKey: "widget.customCenterX")
-        UserDefaults.standard.set(frame.origin.y, forKey: "widget.customY")
+        AppConfig.set(AppConfig.Widget.hasCustomPosition, true)
+        AppConfig.set(AppConfig.Widget.customCenterX, frame.midX)
+        AppConfig.set(AppConfig.Widget.customY, frame.origin.y)
 
         isEditMode = false
         ignoresMouseEvents = true

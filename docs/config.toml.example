@@ -1,0 +1,31 @@
+# yalyric configuration
+# Copy to ~/.config/yalyric/config.toml
+# Only include settings you want to override. App restart required.
+
+[general]
+# autoHideOnPause = true       # hide overlay when Spotify paused
+# autoHideDelay = 3.0          # seconds before hiding (0 = immediate)
+# lyricsOffset = 0             # timing shift in seconds (+earlier, -later)
+# lyricsLanguage = "Auto"      # Auto, Any, English, Japanese, Korean, Chinese, etc.
+# widgetLineCount = 5          # desktop widget lines: 3, 5, 7, or 9
+
+[sources]
+# spDCCookie = ""              # Spotify SP_DC cookie (DevTools → Cookies → sp_dc)
+# durationTolerance = 30.0     # max duration mismatch in seconds (5–60)
+
+[theme]
+# fontName = ""                # empty = system font. e.g. "SF Mono", "Menlo"
+# currentLineFontSize = 24     # 12–48
+# nextLineFontSize = 16        # 10–36
+# letterSpacing = 0            # -2 to 8
+# transitionStyle = "Slide Up" # Slide Up, Crossfade, Scale Fade, Push, None
+# backgroundStyle = "None (Transparent)"  # Frosted Glass Pill, Solid Pill, Full-Width Bar
+# backgroundCornerRadius = 12
+# backgroundOpacity = 0.5      # 0.0–1.0
+# animationDuration = 0.5      # 0.1–1.0 seconds
+# overlayPosition = "Bottom Center"  # Top Center, Center, Bottom Left, Bottom Right
+# overlayWidth = 800           # max width in points (400–1600)
+# nextLineOpacity = 0.5        # 0.0–1.0
+# karaokeFillEnabled = false   # gradient sweep across current line
+# fillEdgeWidth = 0.06         # gradient softness (0.02 sharp – 0.20 smooth)
+# shadowBlurRadius = 4         # 0 = no shadow

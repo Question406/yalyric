@@ -197,9 +197,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Onboarding
 
     private func showOnboardingIfNeeded() {
-        let key = "hasLaunchedBefore"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
+        guard !AppConfig.get(AppConfig.General.hasLaunchedBefore) else { return }
+        AppConfig.set(AppConfig.General.hasLaunchedBefore, true)
         hasShownOnboarding = true
         overlayWindow?.showTrackInfo(
             title: "yalyric is running",
@@ -233,6 +232,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func hideOverlay() {
         guard !isOverlayHidden else { return }
+        guard overlayWindow?.isEditMode != true else { return }
         isOverlayHidden = true
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.3

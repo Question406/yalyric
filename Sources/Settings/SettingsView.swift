@@ -343,15 +343,15 @@ struct AppearanceTab: View {
                     ForEach(OverlayPosition.allCases.filter { $0 != .custom }, id: \.rawValue) { pos in
                         Text(pos.rawValue).tag(pos)
                     }
-                    if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
+                    if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
                         Text("Custom").tag(OverlayPosition.custom)
                     }
                 }
                 .onChange(of: themeManager.theme.overlayPosition) { newValue in
                     if newValue != .custom {
-                        UserDefaults.standard.removeObject(forKey: "overlay.hasCustomPosition")
-                        UserDefaults.standard.removeObject(forKey: "overlay.customCenterX")
-                        UserDefaults.standard.removeObject(forKey: "overlay.customY")
+                        AppConfig.set(AppConfig.Overlay.hasCustomPosition, false)
+                        AppConfig.set(AppConfig.Overlay.customCenterX, 0)
+                        AppConfig.set(AppConfig.Overlay.customY, 0)
                     }
                 }
                 LabeledSlider(

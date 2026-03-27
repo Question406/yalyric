@@ -4,7 +4,7 @@ public struct SpotifyInternalProvider: LyricsProvider {
     public let source: LyricsSource = .spotify
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
-        let cookie = UserDefaults.standard.string(forKey: "spDCCookie") ?? ""
+        let cookie = AppConfig.get(AppConfig.Sources.spDCCookie)
         guard !cookie.isEmpty else { return nil }
 
         // Step 1: Get access token using SP_DC cookie

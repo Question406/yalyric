@@ -37,9 +37,9 @@ class OverlayWindow: NSWindow {
 
         // Use saved custom position if available, otherwise use preset
         let origin: NSPoint
-        if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
-            let centerX = CGFloat(UserDefaults.standard.double(forKey: "overlay.customCenterX"))
-            let y = CGFloat(UserDefaults.standard.double(forKey: "overlay.customY"))
+        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
+            let centerX = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
             origin = NSPoint(x: centerX - size.width / 2, y: y)
         } else {
             origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
@@ -122,9 +122,9 @@ class OverlayWindow: NSWindow {
         guard isEditMode else { return }
 
         // Save center X (not origin) so dynamic width doesn't shift position on reload
-        UserDefaults.standard.set(true, forKey: "overlay.hasCustomPosition")
-        UserDefaults.standard.set(frame.midX, forKey: "overlay.customCenterX")
-        UserDefaults.standard.set(frame.origin.y, forKey: "overlay.customY")
+        AppConfig.set(AppConfig.Overlay.hasCustomPosition, true)
+        AppConfig.set(AppConfig.Overlay.customCenterX, frame.midX)
+        AppConfig.set(AppConfig.Overlay.customY, frame.origin.y)
 
         isEditMode = false
         ignoresMouseEvents = true
@@ -313,9 +313,9 @@ class OverlayWindow: NSWindow {
         let newSize = NSSize(width: width, height: 90)
 
         // Check for user-saved custom position (stored independently from theme)
-        if UserDefaults.standard.bool(forKey: "overlay.hasCustomPosition") {
-            let centerX = CGFloat(UserDefaults.standard.double(forKey: "overlay.customCenterX"))
-            let y = CGFloat(UserDefaults.standard.double(forKey: "overlay.customY"))
+        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
+            let centerX = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
             let x = centerX - newSize.width / 2
             setFrame(NSRect(origin: NSPoint(x: x, y: y), size: newSize), display: true)
             return

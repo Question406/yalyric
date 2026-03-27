@@ -1,6 +1,6 @@
 import AppKit
 
-class MenuBarController: NSObject {
+class MenuBarController: NSObject, NSPopoverDelegate {
     let statusItem: NSStatusItem
     var contextMenu: NSMenu?  // set by AppDelegate
     private var popover: NSPopover?
@@ -77,6 +77,7 @@ class MenuBarController: NSObject {
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 320, height: 400)
         popover.behavior = .transient
+        popover.delegate = self
 
         let viewController = NSViewController()
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 400))
@@ -189,6 +190,15 @@ class MenuBarController: NSObject {
     private func stopInterpolation() {
         interpolationTimer?.invalidate()
         interpolationTimer = nil
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        stopInterpolation()
+        scrollResumeTimer?.invalidate()
+        scrollResumeTimer = nil
+        userScrolling = false
+        NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+        popover = nil
     }
 
     private func refreshTextView() {
