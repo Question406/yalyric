@@ -40,7 +40,7 @@ jobs:
 
             url "https://github.com/${{ github.repository }}/releases/download/v#{version}/yalyric-v#{version}-macos.zip"
             name "yalyric"
-            desc "Real-time Spotify and Apple Music lyrics on macOS"
+            desc "Yet Another Lyric sync for Spotify and Apple Music on macOS"
             homepage "https://github.com/${{ github.repository }}"
 
             depends_on macos: ">= :ventura"
