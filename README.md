@@ -1,4 +1,5 @@
 <p align="center">
+  <img src="assets/icon.png" width="128" alt="yalyric icon">
   <h1 align="center">yalyric</h1>
   <p align="center"><b>Yet Another Lyric</b> — real-time Spotify & Apple Music lyrics on your macOS desktop</p>
 </p>

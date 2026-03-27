@@ -17,6 +17,12 @@ mkdir -p "${CONTENTS}/Resources"
 # Copy binary
 cp ".build/release/${APP_NAME}" "${CONTENTS}/MacOS/${APP_NAME}"
 
+# Copy app icon
+if [ -f "Resources/yalyric.icns" ]; then
+    cp "Resources/yalyric.icns" "${CONTENTS}/Resources/AppIcon.icns"
+    echo "App icon included."
+fi
+
 # Create Info.plist
 cat > "${CONTENTS}/Info.plist" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -44,7 +50,7 @@ cat > "${CONTENTS}/Info.plist" << EOF
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>yalyric needs access to Spotify to read the currently playing track and sync lyrics.</string>
+    <string>yalyric needs access to Spotify and Apple Music to read the currently playing track and sync lyrics.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>
