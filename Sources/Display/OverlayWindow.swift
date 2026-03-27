@@ -23,6 +23,7 @@ class OverlayWindow: NSWindow {
     private var isAnimating = false
     private var isMouseInside = false
     private var anchoredCenterX: CGFloat = 0  // stable center for resizeToFit
+    private var lastTargetWidth: CGFloat = 0  // prevents redundant animations
     private(set) var isEditMode = false
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
@@ -236,6 +237,7 @@ class OverlayWindow: NSWindow {
         let posKey = "\(theme.overlayPosition.rawValue)|\(theme.overlayWidth)|\(theme.backgroundStyle.rawValue)"
         if posKey != lastPositionKey {
             lastPositionKey = posKey
+            lastTargetWidth = 0  // force re-apply on next resize
             applyPosition(theme)
         }
 
@@ -363,12 +365,13 @@ class OverlayWindow: NSWindow {
             max(minOverlayWidth, textWidth + horizontalPadding * 2)
         )
 
-        let currentFrame = frame
-        guard abs(currentFrame.width - targetWidth) > 2 else { return }
+        // Skip if target hasn't changed — prevents redundant animations
+        guard abs(lastTargetWidth - targetWidth) > 2 else { return }
+        lastTargetWidth = targetWidth
 
-        // Always use the anchored center — immune to animation drift
-        let newOrigin = NSPoint(x: anchoredCenterX - targetWidth / 2, y: currentFrame.origin.y)
-        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: currentFrame.height))
+        let currentY = frame.origin.y
+        let newOrigin = NSPoint(x: anchoredCenterX - targetWidth / 2, y: currentY)
+        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: frame.height))
 
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
