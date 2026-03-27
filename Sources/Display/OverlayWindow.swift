@@ -22,6 +22,7 @@ class OverlayWindow: NSWindow {
     private var cancellables = Set<AnyCancellable>()
     private var isAnimating = false
     private var isMouseInside = false
+    private var anchoredCenterX: CGFloat = 0  // stable center for resizeToFit
     private(set) var isEditMode = false
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
@@ -38,11 +39,13 @@ class OverlayWindow: NSWindow {
         // Use saved custom position if available, otherwise use preset
         let origin: NSPoint
         if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let centerX = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let cx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
             let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
-            origin = NSPoint(x: centerX - size.width / 2, y: y)
+            origin = NSPoint(x: cx - size.width / 2, y: y)
+            anchoredCenterX = cx
         } else {
             origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
+            anchoredCenterX = origin.x + size.width / 2
         }
 
         super.init(
@@ -122,8 +125,9 @@ class OverlayWindow: NSWindow {
         guard isEditMode else { return }
 
         // Save center X (not origin) so dynamic width doesn't shift position on reload
+        anchoredCenterX = frame.midX
         AppConfig.set(AppConfig.Overlay.hasCustomPosition, true)
-        AppConfig.set(AppConfig.Overlay.customCenterX, frame.midX)
+        AppConfig.set(AppConfig.Overlay.customCenterX, anchoredCenterX)
         AppConfig.set(AppConfig.Overlay.customY, frame.origin.y)
 
         isEditMode = false
@@ -317,6 +321,7 @@ class OverlayWindow: NSWindow {
             let centerX = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
             let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
             let x = centerX - newSize.width / 2
+            anchoredCenterX = centerX
             setFrame(NSRect(origin: NSPoint(x: x, y: y), size: newSize), display: true)
             return
         }
@@ -328,6 +333,7 @@ class OverlayWindow: NSWindow {
         } else {
             origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
         }
+        anchoredCenterX = origin.x + newSize.width / 2
         setFrame(NSRect(origin: origin, size: newSize), display: true)
     }
 
@@ -360,9 +366,8 @@ class OverlayWindow: NSWindow {
         let currentFrame = frame
         guard abs(currentFrame.width - targetWidth) > 2 else { return }
 
-        // Keep horizontal center stable
-        let centerX = currentFrame.midX
-        let newOrigin = NSPoint(x: centerX - targetWidth / 2, y: currentFrame.origin.y)
+        // Always use the anchored center — immune to animation drift
+        let newOrigin = NSPoint(x: anchoredCenterX - targetWidth / 2, y: currentFrame.origin.y)
         let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: currentFrame.height))
 
         if animated {

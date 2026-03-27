@@ -4,20 +4,15 @@ class MenuBarController: NSObject, NSPopoverDelegate {
     let statusItem: NSStatusItem
     var contextMenu: NSMenu?  // set by AppDelegate
     private var popover: NSPopover?
-    private let scrollView = NSScrollView()
-    private let textView = NSTextView()
+    private var popoverScrollView: NSScrollView?
+    private var popoverTextView: NSTextView?
     private var allLines: [LyricLine] = []
     private var currentIndex: Int = -1
-    private var currentProgress: Double = 0
     private var lyricsSource: LyricsSource?
     private var lyricsSynced: Bool = false
     private var userScrolling = false
     private var scrollResumeTimer: Timer?
     private var lastAutoScrollIndex: Int = -1
-    private var displayProgress: Double = 0  // smoothly interpolated
-    private var progressRate: Double = 0     // progress per second
-    private var lastProgressUpdate: Date = Date()
-    private var interpolationTimer: Timer?
 
     private static let fallbackIcon = "♪ yalyric"
 
@@ -36,15 +31,12 @@ class MenuBarController: NSObject, NSPopoverDelegate {
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp {
-            // Right-click: show context menu
             if let menu = contextMenu {
                 statusItem.menu = menu
                 statusItem.button?.performClick(nil)
-                // Remove menu after it closes so left-click works again
                 DispatchQueue.main.async { self.statusItem.menu = nil }
             }
         } else {
-            // Left-click: toggle popover
             togglePopover()
         }
     }
@@ -61,59 +53,78 @@ class MenuBarController: NSObject, NSPopoverDelegate {
 
     @objc private func togglePopover() {
         if let popover = popover, popover.isShown {
-            popover.performClose(nil)
-            self.popover = nil
-            stopInterpolation()
-            scrollResumeTimer?.invalidate()
-            scrollResumeTimer = nil
-            userScrolling = false
-            NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
+            closePopover()
         } else {
             showPopover()
         }
     }
 
+    private func closePopover() {
+        popover?.performClose(nil)
+        cleanupPopover()
+    }
+
+    private func cleanupPopover() {
+        scrollResumeTimer?.invalidate()
+        scrollResumeTimer = nil
+        userScrolling = false
+        if let sv = popoverScrollView {
+            NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: sv)
+        }
+        popover = nil
+        popoverScrollView = nil
+        popoverTextView = nil
+    }
+
     private func showPopover() {
-        let popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 400)
-        popover.behavior = .transient
-        popover.delegate = self
+        let pop = NSPopover()
+        pop.contentSize = NSSize(width: 320, height: 400)
+        pop.behavior = .transient
+        pop.delegate = self
 
         let viewController = NSViewController()
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 400))
 
-        scrollView.frame = container.bounds
-        scrollView.autoresizingMask = [.width, .height]
-        scrollView.hasVerticalScroller = true
-        scrollView.drawsBackground = false
+        // Create fresh scroll view + text view each time
+        let sv = NSScrollView(frame: container.bounds)
+        sv.autoresizingMask = [.width, .height]
+        sv.hasVerticalScroller = true
+        sv.drawsBackground = false
 
-        textView.isEditable = false
-        textView.isSelectable = false
-        textView.drawsBackground = false
-        textView.font = NSFont.systemFont(ofSize: 14)
-        textView.textColor = .labelColor
-        textView.textContainerInset = NSSize(width: 12, height: 12)
+        let tv = NSTextView(frame: NSRect(x: 0, y: 0, width: 296, height: 400))
+        tv.minSize = NSSize(width: 0, height: 0)
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.textContainer?.widthTracksTextView = true
+        tv.textContainer?.containerSize = NSSize(width: 296, height: CGFloat.greatestFiniteMagnitude)
+        tv.isEditable = false
+        tv.isSelectable = false
+        tv.drawsBackground = false
+        tv.font = NSFont.systemFont(ofSize: 14)
+        tv.textColor = .labelColor
+        tv.textContainerInset = NSSize(width: 12, height: 12)
 
-        scrollView.documentView = textView
-        container.addSubview(scrollView)
+        sv.documentView = tv
+        container.addSubview(sv)
 
         viewController.view = container
-        popover.contentViewController = viewController
+        pop.contentViewController = viewController
 
         if let button = statusItem.button {
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            pop.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
 
-        self.popover = popover
+        self.popover = pop
+        self.popoverScrollView = sv
+        self.popoverTextView = tv
         userScrolling = false
         lastAutoScrollIndex = -1
         refreshTextView()
-        startInterpolationIfNeeded()
 
-        // Detect user scrolling
         NotificationCenter.default.addObserver(
             self, selector: #selector(userDidScroll),
-            name: NSScrollView.willStartLiveScrollNotification, object: scrollView
+            name: NSScrollView.willStartLiveScrollNotification, object: sv
         )
     }
 
@@ -153,58 +164,20 @@ class MenuBarController: NSObject, NSPopoverDelegate {
     }
 
     func updateProgress(_ progress: Double) {
-        let now = Date()
-        let dt = now.timeIntervalSince(lastProgressUpdate)
-
-        // Compute progress rate (progress units per second)
-        if dt > 0.1 && dt < 2.0 {
-            progressRate = (progress - currentProgress) / dt
-        }
-
-        currentProgress = progress
-        displayProgress = progress
-        lastProgressUpdate = now
-
-        startInterpolationIfNeeded()
-    }
-
-    private func startInterpolationIfNeeded() {
-        guard popover?.isShown == true,
-              ThemeManager.shared.theme.karaokeFillEnabled,
-              interpolationTimer == nil else { return }
-
-        // 30fps interpolation while popover is open
-        interpolationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            guard self.popover?.isShown == true else {
-                self.stopInterpolation()
-                return
-            }
-
-            let dt = Date().timeIntervalSince(self.lastProgressUpdate)
-            self.displayProgress = min(1.0, self.currentProgress + self.progressRate * dt)
-            self.refreshTextView()
-        }
-    }
-
-    private func stopInterpolation() {
-        interpolationTimer?.invalidate()
-        interpolationTimer = nil
+        // Karaoke fill is only in the overlay (GPU-accelerated).
+        // Popover uses simple line highlighting — no per-character updates.
     }
 
     func popoverDidClose(_ notification: Notification) {
-        stopInterpolation()
-        scrollResumeTimer?.invalidate()
-        scrollResumeTimer = nil
-        userScrolling = false
-        NotificationCenter.default.removeObserver(self, name: NSScrollView.willStartLiveScrollNotification, object: scrollView)
-        popover = nil
+        cleanupPopover()
     }
 
     private func refreshTextView() {
+        guard let textView = popoverTextView, let scrollView = popoverScrollView else { return }
+
         let attributed = NSMutableAttributedString()
 
-        // Header: line count · synced/plain · source
+        // Header
         if !allLines.isEmpty, let source = lyricsSource {
             let providerName: String
             switch source {
@@ -238,32 +211,14 @@ class MenuBarController: NSObject, NSPopoverDelegate {
             .paragraphStyle: normalAttrs[.paragraphStyle]!
         ]
 
-        let karaokeFill = ThemeManager.shared.theme.karaokeFillEnabled
-        let dimColor = NSColor.labelColor.withAlphaComponent(0.35)
-
         for (i, line) in allLines.enumerated() {
-            if i == currentIndex && karaokeFill && !line.text.isEmpty {
-                // Karaoke fill: bright portion up to progress, dim for the rest
-                let fillIndex = max(0, min(line.text.count, Int(Double(line.text.count) * displayProgress)))
-                let brightPart = String(line.text.prefix(fillIndex))
-                let dimPart = String(line.text.dropFirst(fillIndex))
-
-                var brightAttrs = highlightAttrs
-                brightAttrs[.foregroundColor] = NSColor.labelColor
-                var dimAttrs = highlightAttrs
-                dimAttrs[.foregroundColor] = dimColor
-
-                attributed.append(NSAttributedString(string: brightPart, attributes: brightAttrs))
-                attributed.append(NSAttributedString(string: dimPart + "\n", attributes: dimAttrs))
-            } else {
-                let attrs = (i == currentIndex) ? highlightAttrs : normalAttrs
-                attributed.append(NSAttributedString(string: line.text + "\n", attributes: attrs))
-            }
+            let attrs = (i == currentIndex) ? highlightAttrs : normalAttrs
+            attributed.append(NSAttributedString(string: line.text + "\n", attributes: attrs))
         }
 
         textView.textStorage?.setAttributedString(attributed)
 
-        // Auto-scroll to current line (skip if user is manually scrolling)
+        // Auto-scroll
         if !userScrolling && currentIndex >= 0 && currentIndex < allLines.count && currentIndex != lastAutoScrollIndex {
             lastAutoScrollIndex = currentIndex
             let lineHeight: CGFloat = 24
@@ -273,7 +228,7 @@ class MenuBarController: NSObject, NSPopoverDelegate {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.3
                 ctx.allowsImplicitAnimation = true
-                self.scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollY))
+                scrollView.contentView.setBoundsOrigin(NSPoint(x: 0, y: scrollY))
             }
         }
     }

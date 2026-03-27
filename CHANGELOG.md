@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## v0.2.1
+
+### Fixed
+- Overlay position drifting on each line change (anchored center X, immune to animation drift)
+- Popover not displaying lyrics (fresh NSTextView/NSScrollView per popover open)
+- Auto-hide fading overlay during edit/drag mode
+- Concurrent AppleScript execution after timeout (dedicated serial scriptQueue)
+- AppConfig key name mismatch causing settings to be silently ignored
+- DesktopWidget karaoke mask orphaned after line count change
+- Popover resource leak on transient auto-close (NSPopoverDelegate cleanup)
+- AppConfig Int/Double getters returning default for explicitly-saved zero values
+- Removed karaoke fill from popover (NSTextView can't do smooth per-character updates)
+- Ad-hoc codesigning in bundle script for Gatekeeper compatibility
+- Homebrew cask postflight removes quarantine automatically
+
+## v0.2.0
 
 ### Added
 - Apple Music support — auto-detects active player, seamless switching with Spotify
@@ -15,20 +30,20 @@
 - Adaptive polling (0.5s playing, 2s idle)
 - Dynamic overlay width (resizes to fit text)
 - Draggable overlay and widget positioning via menu bar toggle
-- Auto-hide overlay when Spotify is paused
+- Auto-hide overlay when paused
 - First launch onboarding message
 - AppleScript permission detection with System Settings instructions
 - Manual lyric offset (+/- seconds)
 - Lyrics source and sync status indicators (overlay, popover, menu bar)
 - Podcast/DJ/ad filtering — hides lyrics, shows title in menu bar
 - Menu bar: left-click for lyrics popover, right-click for context menu
-- Popover: smooth auto-scroll with 5s pause on user scroll, karaoke fill
+- Popover: smooth auto-scroll with 5s pause on user scroll
 - Desktop widget: configurable line count (3/5/7/9), karaoke fill, crossfade animations
 - Musixmatch token persistence (survives restarts)
 - Configurable duration tolerance for lyrics matching
 - Spotify crash/restart recovery (3s AppleScript timeout)
 - Structured logging to ~/Library/Logs/yalyric.log
-- Debug logging for all provider results and scoring
+- App icon
 
 ### Fixed
 - Wrong-song lyrics from NetEase/LRCLIB (added name/artist validation)
