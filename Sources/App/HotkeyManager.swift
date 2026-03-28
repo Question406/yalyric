@@ -93,3 +93,117 @@ enum ShortcutParser {
         return result
     }
 }
+
+/// Global hotkey manager using Carbon RegisterEventHotKey.
+/// No accessibility permission required.
+@MainActor
+final class HotkeyManager {
+    static let shared = HotkeyManager()
+
+    // Actions — set by AppDelegate
+    var onToggleOverlay: (() -> Void)?
+    var onToggleAll: (() -> Void)?
+    var onOffsetPlus: (() -> Void)?
+    var onOffsetMinus: (() -> Void)?
+    var onOffsetReset: (() -> Void)?
+
+    private var hotkeyRefs: [EventHotKeyRef] = []
+    private var eventHandlerRef: EventHandlerRef?
+
+    // Hotkey IDs — must match the switch in the handler
+    private enum HotkeyID: UInt32 {
+        case toggleOverlay = 1
+        case toggleAll = 2
+        case offsetPlus = 3
+        case offsetMinus = 4
+        case offsetReset = 5
+    }
+
+    private init() {}
+
+    func registerAll() {
+        unregisterAll()
+
+        guard AppConfig.get(AppConfig.Shortcuts.enabled) else {
+            YalyricLog.info("[yalyric] Global shortcuts disabled")
+            return
+        }
+
+        // Install a single Carbon event handler for all hotkeys
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        let handlerResult = InstallEventHandler(GetApplicationEventTarget(), hotkeyEventHandler, 1, &eventType, nil, &eventHandlerRef)
+        guard handlerResult == noErr else {
+            YalyricLog.error("[yalyric] Failed to install hotkey event handler: \(handlerResult)")
+            return
+        }
+
+        // Register each shortcut
+        let bindings: [(HotkeyID, AppConfig.Key<String>)] = [
+            (.toggleOverlay, AppConfig.Shortcuts.toggleOverlay),
+            (.toggleAll, AppConfig.Shortcuts.toggleAll),
+            (.offsetPlus, AppConfig.Shortcuts.offsetPlus),
+            (.offsetMinus, AppConfig.Shortcuts.offsetMinus),
+            (.offsetReset, AppConfig.Shortcuts.offsetReset),
+        ]
+
+        for (id, configKey) in bindings {
+            let shortcutStr = AppConfig.get(configKey)
+            guard let parsed = ShortcutParser.parse(shortcutStr) else {
+                YalyricLog.error("[yalyric] Invalid shortcut: \(shortcutStr)")
+                continue
+            }
+
+            var hotkeyID = EventHotKeyID(signature: OSType(0x594C5243), id: id.rawValue) // "YLRC"
+            var hotkeyRef: EventHotKeyRef?
+            let status = RegisterEventHotKey(parsed.keyCode, parsed.modifiers, hotkeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+            if status == noErr, let ref = hotkeyRef {
+                hotkeyRefs.append(ref)
+                let display = ShortcutParser.displayString(shortcutStr)
+                YalyricLog.info("[yalyric] Registered hotkey: \(display)")
+            } else {
+                YalyricLog.error("[yalyric] Failed to register hotkey \(shortcutStr): \(status)")
+            }
+        }
+    }
+
+    func unregisterAll() {
+        for ref in hotkeyRefs {
+            UnregisterEventHotKey(ref)
+        }
+        hotkeyRefs.removeAll()
+
+        if let handler = eventHandlerRef {
+            RemoveEventHandler(handler)
+            eventHandlerRef = nil
+        }
+    }
+
+    /// Called from the C callback on the main thread.
+    nonisolated func handleHotkey(id: UInt32) {
+        DispatchQueue.main.async {
+            guard let hotkeyID = HotkeyID(rawValue: id) else { return }
+            switch hotkeyID {
+            case .toggleOverlay: self.onToggleOverlay?()
+            case .toggleAll: self.onToggleAll?()
+            case .offsetPlus: self.onOffsetPlus?()
+            case .offsetMinus: self.onOffsetMinus?()
+            case .offsetReset: self.onOffsetReset?()
+            }
+        }
+    }
+}
+
+/// C function pointer for Carbon event handler.
+/// Cannot capture context — uses the global HotkeyManager.shared singleton.
+private func hotkeyEventHandler(
+    _ nextHandler: EventHandlerCallRef?,
+    _ event: EventRef?,
+    _ userData: UnsafeMutableRawPointer?
+) -> OSStatus {
+    guard let event else { return OSStatus(eventNotHandledErr) }
+    var hotkeyID = EventHotKeyID()
+    let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
+    guard status == noErr else { return status }
+    HotkeyManager.shared.handleHotkey(id: hotkeyID.id)
+    return noErr
+}
