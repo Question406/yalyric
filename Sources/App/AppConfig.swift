@@ -142,6 +142,17 @@ enum AppConfig {
         static let customY = Key<Double>("widget.customY", default: 0)
     }
 
+    // MARK: - Shortcuts
+
+    enum Shortcuts {
+        static let enabled = Key<Bool>("shortcuts.enabled", default: true)
+        static let toggleOverlay = Key<String>("shortcuts.toggleOverlay", default: "ctrl+opt+l")
+        static let toggleAll = Key<String>("shortcuts.toggleAll", default: "ctrl+opt+h")
+        static let offsetPlus = Key<String>("shortcuts.offsetPlus", default: "ctrl+opt+right")
+        static let offsetMinus = Key<String>("shortcuts.offsetMinus", default: "ctrl+opt+left")
+        static let offsetReset = Key<String>("shortcuts.offsetReset", default: "ctrl+opt+0")
+    }
+
     // MARK: - Typed Key
 
     struct Key<T> {
