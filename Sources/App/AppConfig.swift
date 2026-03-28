@@ -63,6 +63,14 @@ enum AppConfig {
                 ("fillEdgeWidth", get(Theme.fillEdgeWidth)),
                 ("shadowBlurRadius", get(Theme.shadowBlurRadius)),
             ]),
+            ("shortcuts", "Global keyboard shortcuts", [
+                ("enabled", get(Shortcuts.enabled)),
+                ("toggleOverlay", get(Shortcuts.toggleOverlay)),
+                ("toggleAll", get(Shortcuts.toggleAll)),
+                ("offsetPlus", get(Shortcuts.offsetPlus)),
+                ("offsetMinus", get(Shortcuts.offsetMinus)),
+                ("offsetReset", get(Shortcuts.offsetReset)),
+            ]),
         ]
 
         var data: [String: [String: Any]] = [:]
