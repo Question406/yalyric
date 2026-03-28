@@ -104,8 +104,10 @@ struct SettingsContentView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             SourcesTab(settings: settings)
                 .tabItem { Label("Sources", systemImage: "music.note.list") }
+            ShortcutsTab()
+                .tabItem { Label("Shortcuts", systemImage: "keyboard") }
         }
-        .frame(width: 500, height: 460)
+        .frame(width: 500, height: 500)
         .padding(8)
     }
 }
@@ -451,6 +453,67 @@ struct SourcesTab: View {
                 Text("Get from Spotify Web Player → DevTools → Application → Cookies → sp_dc")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Shortcuts Tab
+
+struct ShortcutsTab: View {
+    @State private var shortcutsEnabled = AppConfig.get(AppConfig.Shortcuts.enabled)
+
+    private let shortcuts: [(String, String, AppConfig.Key<String>)] = [
+        ("Toggle Overlay", "Show/hide the floating overlay", AppConfig.Shortcuts.toggleOverlay),
+        ("Toggle All Displays", "Show/hide all displays at once", AppConfig.Shortcuts.toggleAll),
+        ("Offset +0.5s", "Lyrics appear earlier", AppConfig.Shortcuts.offsetPlus),
+        ("Offset -0.5s", "Lyrics appear later", AppConfig.Shortcuts.offsetMinus),
+        ("Reset Offset", "Reset lyrics timing to default", AppConfig.Shortcuts.offsetReset),
+    ]
+
+    var body: some View {
+        Form {
+            Section("Global Shortcuts") {
+                Toggle("Enable global shortcuts", isOn: $shortcutsEnabled)
+                    .onChange(of: shortcutsEnabled) { newValue in
+                        AppConfig.set(AppConfig.Shortcuts.enabled, newValue)
+                        if newValue {
+                            HotkeyManager.shared.registerAll()
+                        } else {
+                            HotkeyManager.shared.unregisterAll()
+                        }
+                    }
+            }
+
+            if shortcutsEnabled {
+                Section("Key Bindings") {
+                    ForEach(shortcuts, id: \.0) { name, detail, key in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(name)
+                                Text(detail)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(ShortcutParser.displayString(AppConfig.get(key)))
+                                .font(.system(.body, design: .rounded))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(Color.secondary.opacity(0.15))
+                                )
+                        }
+                    }
+                }
+
+                Section {
+                    Text("Customize shortcuts in ~/.config/yalyric/config.toml")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .formStyle(.grouped)
