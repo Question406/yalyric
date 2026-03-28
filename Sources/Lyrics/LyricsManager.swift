@@ -86,7 +86,7 @@ public class LyricsManager: ObservableObject {
         let fm = FileManager.default
         let dir = Self.diskCacheDir
         guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
-        guard files.count > Self.maxDiskCacheSize else { return }
+        guard files.count >= Self.maxDiskCacheSize else { return }
 
         // Sort by modification date, oldest first
         let sorted = files.compactMap { url -> (URL, Date)? in
@@ -131,6 +131,11 @@ public class LyricsManager: ObservableObject {
 
         YalyricLog.info("[yalyric] Fetching lyrics for: \(track.name) — \(track.artist) (duration: \(String(format: "%.1fs", track.duration)), id: \(track.spotifyID))")
 
+        // Cancel previous fetch before anything else
+        currentFetchTask?.cancel()
+        currentFetchTask = nil
+        isFetching = false
+
         // Check memory cache
         if let cached = memoryCacheGet(trackID) {
             YalyricLog.info("[yalyric] ✓ Memory cache hit (\(cached.source.rawValue), \(cached.lines.count) lines)")
@@ -148,8 +153,6 @@ public class LyricsManager: ObservableObject {
             return
         }
 
-        // Cancel previous fetch
-        currentFetchTask?.cancel()
         isFetching = true
         errorMessage = nil
 

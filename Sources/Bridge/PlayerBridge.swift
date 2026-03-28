@@ -52,7 +52,7 @@ class AppleScriptBridge: ObservableObject {
     private func schedulePoll(interval: TimeInterval) {
         pollTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             guard let self else { return }
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self.poll()
                 let next = self.isPlaying ? self.activeInterval : self.idleInterval
                 self.schedulePoll(interval: next)

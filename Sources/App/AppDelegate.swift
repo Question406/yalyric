@@ -219,7 +219,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         autoHideTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self?.hideOverlay()
             }
         }
@@ -362,5 +362,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         playerManager.stopPolling()
+        autoHideTimer?.invalidate()
+        autoHideTimer = nil
+        NotificationCenter.default.removeObserver(self)
     }
 }

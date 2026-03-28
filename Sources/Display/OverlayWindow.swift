@@ -22,6 +22,7 @@ class OverlayWindow: NSWindow {
     private var cancellables = Set<AnyCancellable>()
     private var isAnimating = false
     private var isMouseInside = false
+    private var mouseTrackingTimer: Timer?
     private var anchoredCenterX: CGFloat = 0  // stable center for resizeToFit
     private var lastTargetWidth: CGFloat = 0  // prevents redundant animations
     private(set) var isEditMode = false
@@ -73,12 +74,16 @@ class OverlayWindow: NSWindow {
     private func setupMouseTracking() {
         // Use a lightweight timer to check mouse position
         // Global event monitors can crash with animator() proxies
-        Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+        mouseTrackingTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             guard let self else { return }
-            MainActor.assumeIsolated {
+            DispatchQueue.main.async {
                 self.checkMousePosition()
             }
         }
+    }
+
+    deinit {
+        mouseTrackingTimer?.invalidate()
     }
 
     private func checkMousePosition() {
