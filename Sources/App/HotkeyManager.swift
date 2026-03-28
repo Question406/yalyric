@@ -153,7 +153,7 @@ final class HotkeyManager {
                 continue
             }
 
-            var hotkeyID = EventHotKeyID(signature: OSType(0x594C5243), id: id.rawValue) // "YLRC"
+            let hotkeyID = EventHotKeyID(signature: OSType(0x594C5243), id: id.rawValue) // "YLRC"
             var hotkeyRef: EventHotKeyRef?
             let status = RegisterEventHotKey(parsed.keyCode, parsed.modifiers, hotkeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
             if status == noErr, let ref = hotkeyRef {
@@ -179,16 +179,14 @@ final class HotkeyManager {
     }
 
     /// Called from the C callback on the main thread.
-    nonisolated func handleHotkey(id: UInt32) {
-        DispatchQueue.main.async {
-            guard let hotkeyID = HotkeyID(rawValue: id) else { return }
-            switch hotkeyID {
-            case .toggleOverlay: self.onToggleOverlay?()
-            case .toggleAll: self.onToggleAll?()
-            case .offsetPlus: self.onOffsetPlus?()
-            case .offsetMinus: self.onOffsetMinus?()
-            case .offsetReset: self.onOffsetReset?()
-            }
+    func handleHotkey(id: UInt32) {
+        guard let hotkeyID = HotkeyID(rawValue: id) else { return }
+        switch hotkeyID {
+        case .toggleOverlay: onToggleOverlay?()
+        case .toggleAll: onToggleAll?()
+        case .offsetPlus: onOffsetPlus?()
+        case .offsetMinus: onOffsetMinus?()
+        case .offsetReset: onOffsetReset?()
         }
     }
 }
@@ -204,6 +202,8 @@ private func hotkeyEventHandler(
     var hotkeyID = EventHotKeyID()
     let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotkeyID)
     guard status == noErr else { return status }
-    HotkeyManager.shared.handleHotkey(id: hotkeyID.id)
+    MainActor.assumeIsolated {
+        HotkeyManager.shared.handleHotkey(id: hotkeyID.id)
+    }
     return noErr
 }
