@@ -2,149 +2,147 @@
 
 > From working demo to a real app people want to use.
 
-## Current State (v0.1)
+## Current State (v0.2.2)
 
 What works today:
-- Spotify track detection via AppleScript
-- Lyrics fetching from 4 sources (LRCLIB, Spotify internal, Musixmatch, NetEase)
-- 3 display modes (overlay, desktop widget, menu bar)
-- Basic settings window (display modes, font size, SP_DC cookie, lyrics language)
-- Slide-up crossfade animation on overlay
-- Track metadata shown during intro/loading
-- Language preference filtering (Auto/specific language)
-- Duration-based lyrics matching to reduce song mismatch
-- `.app` bundle via `scripts/bundle.sh`
-- GitHub Actions CI (build + test) and release workflow (tag → zip → GitHub Release)
-- Homebrew cask auto-publish workflow (release → update tap repo)
+- Spotify + Apple Music detection via AppleScript (auto-detects active player)
+- Lyrics fetching from 4 sources in parallel (LRCLIB, Spotify internal, Musixmatch, NetEase)
+- Smart scoring: synced(+3), language match(+1), line count(+1), early return on perfect score
+- 3 display modes (overlay, desktop widget, menu bar popover)
+- SwiftUI settings with 3 tabs (General, Appearance, Sources)
+- 6 theme presets + full customization (font, color, transitions, background styles)
+- Karaoke fill (horizontal gradient sweep on current line)
+- Draggable overlay + widget positioning with custom position persistence
+- Auto-hide overlay on pause (configurable delay)
+- Menu bar popover with scrolling lyrics, auto-follow, provider/sync info
+- Manual lyrics offset adjustment (+/- 0.5s)
+- Two-tier cache: LRU memory (50) + disk JSON (200)
+- First-launch onboarding + AppleScript permission detection
+- Logging to `~/Library/Logs/yalyric.log` with rotation
+- `.app` bundle, GitHub Actions CI/CD, Homebrew cask distribution
 
 ---
 
-## P0 — Must Have Before First Public Release
+## Completed (P0 — Distribution & First Launch)
 
-These are blockers. Without them, users will try yalyric once and never open it again.
-
-### 1. App Bundle & Distribution
-**Why:** Normal users need a standard install path.
-
-- [x] Create proper `.app` bundle with Info.plist, icon, bundle ID
-- [x] Add `NSAppleEventsUsageDescription` for Spotify permission dialog
-- [x] Build script: `./scripts/bundle.sh` → builds release + creates `.app` + zips
-- [x] GitHub Releases with downloadable `.zip` per version
-- [x] GitHub Actions CI: build + test on push, create release artifacts on tag
+- [x] `.app` bundle with Info.plist, icon, bundle ID
+- [x] `NSAppleEventsUsageDescription` for permission dialog
+- [x] Build script: `./scripts/bundle.sh`
+- [x] GitHub Releases with downloadable `.zip`
+- [x] GitHub Actions CI: build + test on push, release on tag
 - [x] Homebrew cask auto-publish workflow
-- [ ] Homebrew tap repo setup and first publish (see Homebrew section below)
-- [ ] Code signing + notarization ($99/year Apple Developer) — eliminates "damaged app" and `xattr -cr` workaround
-- [ ] DMG with drag-to-Applications layout (nicer than zip)
+- [x] Homebrew tap repo setup and first publish
+- [x] Onboarding overlay on first launch
+- [x] AppleScript permission denied detection with clear message
+- [x] Non-music content detection (podcasts, ads)
 
-### 2. First Launch Experience
-**Why:** User opens the app, Spotify is playing, and... nothing happens for a confusing few seconds.
-
-- [x] Detect when Spotify is playing but no lyrics found — show track name + "No lyrics available"
-- [x] Show track metadata during intro before lyrics start
-- [ ] Show a brief onboarding overlay on first launch: "yalyric is running — play a song in Spotify to see lyrics"
-- [ ] Detect when AppleScript permission is denied and show a clear message with link to System Settings
-- [ ] Detect when Spotify is not running and show "Waiting for Spotify..." instead of blank
-
-### 3. Lyrics Reliability
-**Why:** The #1 reason users will judge this app is whether lyrics actually show up.
+## Completed (P0 — Lyrics Reliability)
 
 - [x] Duration-based matching on LRCLIB search (5s tolerance)
-- [x] Reject NetEase results with large duration mismatch
-- [x] Race condition fix: verify track hasn't changed before applying fetched lyrics
+- [x] Reject results with large duration mismatch (all providers)
+- [x] Race condition fix: verify track hasn't changed before applying
 - [x] 5s request timeout on all provider HTTP requests
 - [x] Language preference filtering (Auto/specific)
-- [x] LRCLIB search scoring: prefer exact artist/track name + synced lyrics
-- [ ] Parallel provider fetching — query all 4 concurrently, pick best result
-- [ ] Retry failed fetches once after 2s (network blips)
-- [ ] Show lyrics source in small text ("via LRCLIB") so users know what's working
-- [ ] Manual offset adjustment (+/- seconds) for out-of-sync lyrics
+- [x] Search scoring: name(+3), artist(+3), duration(+2), min score 3
+- [x] Parallel provider fetching with early return on perfect score
+- [x] Lyrics source display ("via LRCLIB · synced")
+- [x] Manual offset adjustment (+/- 0.5s)
 
-### 4. Overlay UX Polish
-**Why:** The overlay is the primary display mode.
+## Completed (P0 — Overlay UX)
 
-- [x] Smooth slide-up crossfade transition (no flashing)
-- [ ] **Draggable positioning** — hold Option to enter edit mode, save position
-- [ ] **Auto-hide when Spotify is paused/stopped**
-- [ ] **Auto-hide when no lyrics**
-- [ ] **Adaptive text color** — auto white/dark based on background
-- [ ] **Background pill** — optional semi-transparent rounded rect
-- [ ] **Multi-monitor support**
+- [x] Smooth transitions (crossfade, slide-up, scale-fade, push)
+- [x] Draggable positioning via menu bar toggle
+- [x] Auto-hide when paused/stopped (configurable delay)
+- [x] Background styles (none, frosted pill, solid pill, full-width bar)
+- [x] Dynamic width (resizes to fit text, centered on anchor)
+
+## Completed (P1 — Menu Bar & Widget)
+
+- [x] Left-click shows lyrics popover, right-click shows menu
+- [x] Scrolling lyrics in popover with smooth auto-follow
+- [x] Karaoke fill progress in menu bar
+- [x] Desktop widget with draggable position
+- [x] Configurable widget line count (3/5/7/9)
+
+## Completed (P1 — Settings & Performance)
+
+- [x] SwiftUI settings (NSHostingController) with 3 tabs
+- [x] LRU memory cache (50) + disk cache (200) with eviction
+- [x] Log file with rotation (2MB max)
+- [x] Apple Music support
 
 ---
 
-## P1 — Should Have for User Retention
+## Up Next
 
-These make the difference between "neat tool" and "I actually keep this running."
+### Keyboard Shortcuts (P1)
+**Why:** Power users need quick access without clicking the menu bar.
 
-### 5. Menu Bar Improvements
-- [ ] Left-click shows lyrics popover, right-click shows menu (Settings/Quit)
-- [ ] Scrolling lyrics in popover with smooth auto-follow
-- [ ] Click a lyric line to seek Spotify to that timestamp
-- [ ] Show album art + track info at top of popover
-- [ ] Progress bar in popover
-
-### 6. Desktop Widget Improvements
-- [ ] Draggable position
-- [ ] Configurable visible line count (3/5/7)
-- [ ] Optional album art background with blur
-- [ ] Smooth scroll animation when lines change
-
-### 7. Keyboard Shortcuts
-- [ ] Global hotkey to toggle overlay (e.g., ⌘⇧L)
+- [ ] Global hotkey to toggle overlay visibility (e.g., ⌘⇧L)
 - [ ] Global hotkey to toggle all displays
-- [ ] Nudge lyric offset +0.5s / -0.5s
-- [ ] Open/close lyrics popover
+- [ ] Nudge lyric offset +0.5s / -0.5s via hotkey
+- [ ] Open/close lyrics popover via hotkey
+- [ ] Settings UI for customizing key bindings
 
-### 8. Settings Overhaul
-- [ ] Rewrite with SwiftUI (NSHostingController)
-- [ ] Tabbed: General / Appearance / Sources / Shortcuts
-- [ ] Live preview of appearance changes
+### Word-Level Karaoke (P2)
+**Why:** Per-word highlighting is a major visual upgrade over per-line fill.
 
-### 9. Performance & Stability
-- [ ] Move AppleScript polling off main thread (Process + osascript or ScriptingBridge)
-- [ ] Cap lyrics cache (50 tracks LRU)
-- [ ] Handle Spotify crash/restart gracefully
-- [ ] Log file (`~/Library/Logs/yalyric.log`)
+- [ ] Parse Spotify `syllables[]` data from internal API
+- [ ] Word-level gradient mask with per-syllable timing
+- [ ] Fallback to line-level fill when syllable data unavailable
+
+### Screenshots & Promotion (P0)
+**Why:** No one installs an app without seeing it first.
+
+- [ ] Screenshots of all 3 display modes for README
+- [ ] Animated GIF/video showing lyrics sync in action
+- [ ] Update README with visuals and feature list
 
 ---
 
-## P2 — Nice to Have
+## Backlog
 
-### 10. Visual Flair
-- [ ] Karaoke mode — word-level highlighting
+### Distribution
+- [ ] Code signing + notarization ($99/yr Apple Developer)
+- [ ] DMG with drag-to-Applications layout
+
+### Popover Enhancements
+- [ ] Click a lyric line to seek player to that timestamp
+- [ ] Album art + track info header
+- [ ] Progress bar
+
+### Visual Features
+- [ ] Adaptive text color based on desktop background
 - [ ] Color sync from album art
 - [ ] Vertical lyrics mode for CJK
 - [ ] Animated gradient background
 
-### 11. Local Lyrics Support
+### System Integration
+- [ ] Launch at login (SMAppService)
+- [ ] Multi-monitor: choose which screen for overlay
+- [ ] Retry failed fetches once after 2s
+
+### Local Lyrics
 - [ ] Drag & drop `.lrc` file assignment
 - [ ] Auto-scan `~/Music/Lyrics/` folder
 - [ ] Built-in lyrics editor
 - [ ] Export as `.lrc`
 
-### 12. Social & Sharing
+### Social & Sharing
 - [ ] Copy current line hotkey
 - [ ] Share lyrics as image (album art background)
-- [ ] Discord Rich Presence integration
-
-### 13. Multi-Player Support
-- [ ] Apple Music (AppleScript)
-- [ ] Browser Spotify (extension)
-
-### 14. Sync & Cloud
-- [ ] iCloud sync for settings + offsets
-- [ ] Community offset corrections to LRCLIB
-- [ ] Per-track offset persistence
 
 ---
 
-## P3 — Future / Exploratory
+## Future / Exploratory
 
 - [ ] iOS companion app
 - [ ] Translation overlay
 - [ ] AI-powered lyrics search
 - [ ] Spotify Web API OAuth integration
 - [ ] VoiceOver / accessibility
+- [ ] Per-track offset persistence
+- [ ] Community offset corrections
 
 ---
 
@@ -170,40 +168,3 @@ The `.github/workflows/homebrew.yml` workflow triggers on every published releas
 brew tap yourname/tap
 brew install --cask yalyric
 ```
-
-Homebrew automatically handles:
-- Downloading the zip
-- Extracting the `.app`
-- Moving to `/Applications`
-- Removing quarantine flags (no `xattr -cr` needed)
-- Updates via `brew upgrade`
-
----
-
-## Suggested Release Plan
-
-### v0.1 — "It works" ✅
-Demo quality. `.app` bundle, CI, basic lyrics sync.
-
-### v0.2 — "I can actually use this"
-Complete remaining P0: onboarding, permission detection, draggable overlay, auto-hide, Homebrew tap.
-Target: 2 weeks.
-
-### v0.5 — "I want to keep using this"
-P1: menu bar popover, keyboard shortcuts, SwiftUI settings, performance.
-Target: 3-4 weeks after v0.2.
-
-### v1.0 — "I'd recommend this"
-Cherry-pick P2: karaoke mode, local lyrics, sharing.
-Code signing + notarization.
-Target: 2-3 months.
-
----
-
-## Success Metrics
-
-1. **Lyrics hit rate** — >80% for English pop/rock
-2. **Time to first lyric** — <2s from song start
-3. **Daily active usage** — launch-at-login adoption rate
-4. **GitHub stars / Homebrew installs**
-5. **Issue reports** — people caring enough to report = good sign
