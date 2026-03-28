@@ -19,6 +19,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var isOverlayHidden = false
     private var hasShownOnboarding = false
     private var hasEverPlayed = false
+    private var allDisplaysHidden = false
 
     private enum DisplayState: Equatable {
         case noTrack, nonMusic, permissionDenied, loading, noLyrics, intro, lyrics
@@ -33,6 +34,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showOnboardingIfNeeded()
         syncEngine.offset = SettingsManager.shared.lyricsOffset
         playerManager.startPolling()
+
+        let hk = HotkeyManager.shared
+        hk.onToggleOverlay = { [weak self] in self?.toggleOverlayVisibility() }
+        hk.onToggleAll = { [weak self] in self?.toggleAllDisplays() }
+        hk.onOffsetPlus = { [weak self] in self?.nudgeOffset(0.5) }
+        hk.onOffsetMinus = { [weak self] in self?.nudgeOffset(-0.5) }
+        hk.onOffsetReset = { [weak self] in self?.resetOffset() }
+        hk.registerAll()
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(displayModesDidChange),
@@ -252,6 +261,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateAllDisplays() {
+        guard !allDisplaysHidden else { return }
         let currentLine = syncEngine.currentLine
         let nextLine = syncEngine.nextLine
         let index = syncEngine.currentLineIndex
@@ -360,7 +370,52 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menuBarController?.updateLyrics(lines: lines, currentIndex: index)
     }
 
+    // MARK: - Hotkey Actions
+
+    private func toggleOverlayVisibility() {
+        if isOverlayHidden {
+            cancelAutoHide()
+            showOverlay()
+        } else {
+            cancelAutoHide()
+            hideOverlay()
+        }
+    }
+
+    private func toggleAllDisplays() {
+        allDisplaysHidden.toggle()
+        if allDisplaysHidden {
+            cancelAutoHide()
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.3
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.overlayWindow?.animator().alphaValue = 0
+                self.desktopWidget?.animator().alphaValue = 0
+            }
+            menuBarController?.updateCurrentLine("")
+        } else {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.3
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                self.overlayWindow?.animator().alphaValue = 1
+                self.desktopWidget?.animator().alphaValue = 1
+            }
+            isOverlayHidden = false
+            lastDisplayedLineIndex = -2  // force redraw
+            updateAllDisplays()
+        }
+    }
+
+    private func nudgeOffset(_ delta: TimeInterval) {
+        SettingsManager.shared.lyricsOffset += delta
+    }
+
+    private func resetOffset() {
+        SettingsManager.shared.lyricsOffset = 0
+    }
+
     public func applicationWillTerminate(_ notification: Notification) {
+        HotkeyManager.shared.unregisterAll()
         playerManager.stopPolling()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
