@@ -484,7 +484,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ) }
             menuBarController?.updateCurrentLine(track!.name)
             menuBarController?.updateLyrics(lines: lines, currentIndex: index)
-            forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index) }
+            forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index, words: syncEngine.currentWords) }
             return
         }
 
@@ -492,10 +492,14 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let isSynced = lyricsManager.currentLyrics?.isSynced ?? false
         forEachOverlay { $0.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced) }
         menuBarController?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
-        forEachOverlay { $0.updateLyrics(current: currentLine, next: nextLine) }
+        let currentWords = syncEngine.currentWords
+        forEachOverlay { $0.updateLyrics(current: currentLine, next: nextLine, words: currentWords) }
+        let wordProgresses = syncEngine.wordProgresses
+        forEachOverlay { $0.updateWordProgresses(wordProgresses) }
         forEachOverlay { $0.updateProgress(syncEngine.progress) }
         menuBarController?.updateProgress(syncEngine.progress)
-        forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index) }
+        forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index, words: syncEngine.currentWords) }
+        forEachWidget { $0.updateWordProgresses(syncEngine.wordProgresses) }
         forEachWidget { $0.updateProgress(syncEngine.progress) }
 
         if playerManager.isPlaying {
