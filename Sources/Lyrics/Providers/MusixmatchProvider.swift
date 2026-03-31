@@ -91,6 +91,21 @@ public struct MusixmatchProvider: LyricsProvider {
             }
         }
 
+        // Try richsync (word-level timing) first
+        if let richsyncGet = macroCalls["track.richsync.get"] as? [String: Any],
+           let rsMessage = richsyncGet["message"] as? [String: Any],
+           let rsBody = rsMessage["body"] as? [String: Any],
+           let richsyncList = rsBody["richsync_list"] as? [[String: Any]],
+           let first = richsyncList.first,
+           let richsync = first["richsync"] as? [String: Any],
+           let richsyncBody = richsync["richsync_body"] as? String {
+            let lines = RichsyncParser.parse(richsyncBody)
+            if !lines.isEmpty {
+                YalyricLog.info("[musixmatch] Got richsync with \(lines.count) lines, word-level timing available")
+                return Lyrics(lines: lines, source: .musixmatch, isSynced: true)
+            }
+        }
+
         // Try synced subtitles first
         if let subtitleGet = macroCalls["track.subtitles.get"] as? [String: Any],
            let subMessage = subtitleGet["message"] as? [String: Any],
@@ -117,5 +132,39 @@ public struct MusixmatchProvider: LyricsProvider {
         }
 
         return nil
+    }
+}
+
+/// Parses Musixmatch richsync JSON into LyricLines with word-level timing.
+enum RichsyncParser {
+    static func parse(_ richsyncBody: String) -> [LyricLine] {
+        guard let data = richsyncBody.data(using: .utf8),
+              let entries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+
+        var lines: [LyricLine] = []
+        for entry in entries {
+            guard let ts = entry["ts"] as? Double,
+                  let wordArray = entry["l"] as? [[String: Any]],
+                  !wordArray.isEmpty else {
+                continue
+            }
+
+            var words: [WordTiming] = []
+            var fullText = ""
+            for w in wordArray {
+                guard let c = w["c"] as? String,
+                      let o = w["o"] as? Double else { continue }
+                words.append(WordTiming(text: c, offset: o))
+                fullText += c
+            }
+
+            guard !words.isEmpty else { continue }
+            let text = fullText.trimmingCharacters(in: .whitespaces)
+            lines.append(LyricLine(time: ts, text: text, words: words))
+        }
+
+        return lines.sorted { $0.time < $1.time }
     }
 }

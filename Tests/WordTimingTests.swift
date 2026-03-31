@@ -150,3 +150,55 @@ final class SyncEngineWordProgressTests: XCTestCase {
         XCTAssertTrue(engine.currentWords.isEmpty)
     }
 }
+
+final class RichsyncParsingTests: XCTestCase {
+
+    func testParseRichsyncBody() throws {
+        let json = """
+        [
+            {"ts": 0.96, "te": 3.45, "l": [
+                {"c": "One, ", "o": 0.0},
+                {"c": "two, ", "o": 0.5},
+                {"c": "three", "o": 1.0}
+            ]},
+            {"ts": 4.0, "te": 7.0, "l": [
+                {"c": "Hello ", "o": 0.0},
+                {"c": "world", "o": 1.5}
+            ]}
+        ]
+        """
+        let lines = RichsyncParser.parse(json)
+        XCTAssertEqual(lines.count, 2)
+
+        XCTAssertEqual(lines[0].time, 0.96, accuracy: 0.01)
+        XCTAssertEqual(lines[0].text, "One, two, three")
+        XCTAssertEqual(lines[0].words?.count, 3)
+        XCTAssertEqual(lines[0].words?[0].text, "One, ")
+        XCTAssertEqual(lines[0].words?[0].offset, 0.0)
+        XCTAssertEqual(lines[0].words?[1].text, "two, ")
+        XCTAssertEqual(lines[0].words?[1].offset, 0.5)
+        XCTAssertEqual(lines[0].words?[2].text, "three")
+        XCTAssertEqual(lines[0].words?[2].offset, 1.0)
+
+        XCTAssertEqual(lines[1].time, 4.0, accuracy: 0.01)
+        XCTAssertEqual(lines[1].words?.count, 2)
+    }
+
+    func testParseRichsyncBodyInvalid() {
+        let lines = RichsyncParser.parse("not json")
+        XCTAssertTrue(lines.isEmpty)
+    }
+
+    func testParseRichsyncBodyEmpty() {
+        let lines = RichsyncParser.parse("[]")
+        XCTAssertTrue(lines.isEmpty)
+    }
+
+    func testParseRichsyncBodyMissingFields() {
+        let json = """
+        [{"ts": 1.0}]
+        """
+        let lines = RichsyncParser.parse(json)
+        XCTAssertTrue(lines.isEmpty)
+    }
+}
