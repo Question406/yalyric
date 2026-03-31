@@ -29,6 +29,7 @@ class OverlayWindow: NSWindow {
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
     private(set) weak var currentScreen: NSScreen?
+    private var currentScreenID: CGDirectDisplayID = 0
 
     // Karaoke fill gradient masks
     private var gradientMaskA: CAGradientLayer?
@@ -78,6 +79,7 @@ class OverlayWindow: NSWindow {
         observeTheme()
         setupMouseTracking()
         currentScreen = screen
+        currentScreenID = ScreenDetector.displayID(of: screen)
     }
 
     private func setupMouseTracking() {
@@ -375,8 +377,10 @@ class OverlayWindow: NSWindow {
     // MARK: - Multi-Display
 
     func moveToScreen(_ screen: NSScreen, animated: Bool = true) {
-        guard screen !== currentScreen else { return }
+        let targetID = ScreenDetector.displayID(of: screen)
+        guard targetID != currentScreenID else { return }
         currentScreen = screen
+        currentScreenID = targetID
 
         let theme = ThemeManager.shared.theme
         let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth

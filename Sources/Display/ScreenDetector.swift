@@ -41,6 +41,13 @@ enum ScreenDetector {
         }) ?? NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
     }
 
+    // MARK: - Screen Identity
+
+    /// Stable display ID that survives NSScreen instance recreation.
+    static func displayID(of screen: NSScreen) -> CGDirectDisplayID {
+        screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
+    }
+
     // MARK: - Relative Position Conversion
 
     /// Convert absolute screen coordinates to relative (0.0–1.0) within visibleFrame.

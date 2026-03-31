@@ -12,6 +12,7 @@ class DesktopWidget: NSWindow {
     private(set) var isEditMode = false
     private var editBorderLayer: CAShapeLayer?
     private(set) weak var currentScreen: NSScreen?
+    private var currentScreenID: CGDirectDisplayID = 0
     private var backgroundEffect: NSVisualEffectView!
 
     init() {
@@ -54,6 +55,7 @@ class DesktopWidget: NSWindow {
         applyTheme(ThemeManager.shared.theme)
         observeTheme()
         currentScreen = screen
+        currentScreenID = ScreenDetector.displayID(of: screen)
     }
 
     private func observeTheme() {
@@ -244,8 +246,10 @@ class DesktopWidget: NSWindow {
     // MARK: - Multi-Display
 
     func moveToScreen(_ screen: NSScreen, animated: Bool = true) {
-        guard screen !== currentScreen else { return }
+        let targetID = ScreenDetector.displayID(of: screen)
+        guard targetID != currentScreenID else { return }
         currentScreen = screen
+        currentScreenID = targetID
 
         let width: CGFloat = 400
         let height = CGFloat(visibleLines) * 36 + 32
