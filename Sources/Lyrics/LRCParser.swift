@@ -1,12 +1,24 @@
 import Foundation
 
+public struct WordTiming: Equatable, Codable {
+    public let text: String      // word text (may include trailing space)
+    public let offset: Double    // seconds from line start
+
+    public init(text: String, offset: Double) {
+        self.text = text
+        self.offset = offset
+    }
+}
+
 public struct LyricLine: Equatable, Codable {
     public let time: TimeInterval  // seconds
     public let text: String
+    public let words: [WordTiming]?  // nil = no word-level data
 
-    public init(time: TimeInterval, text: String) {
+    public init(time: TimeInterval, text: String, words: [WordTiming]? = nil) {
         self.time = time
         self.text = text
+        self.words = words
     }
 }
 

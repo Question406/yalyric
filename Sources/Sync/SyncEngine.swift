@@ -75,4 +75,20 @@ public class SyncEngine: ObservableObject {
             progress = min(1.0, max(0.0, (adjustedPosition - lineStart) / lineDuration))
         }
     }
+
+    /// Estimate word timings by distributing duration proportional to character count.
+    public nonisolated static func estimateWordTimings(text: String, lineDuration: Double) -> [WordTiming] {
+        let wordTexts = text.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        guard !wordTexts.isEmpty, lineDuration > 0 else { return [] }
+
+        let totalChars = wordTexts.reduce(0) { $0 + $1.count }
+        guard totalChars > 0 else { return [] }
+
+        var offset = 0.0
+        return wordTexts.map { word in
+            let timing = WordTiming(text: word, offset: offset)
+            offset += lineDuration * Double(word.count) / Double(totalChars)
+            return timing
+        }
+    }
 }
