@@ -11,6 +11,7 @@ class DesktopWidget: NSWindow {
     private var gradientMask: CAGradientLayer?
     private(set) var isEditMode = false
     private var editBorderLayer: CAShapeLayer?
+    private(set) weak var currentScreen: NSScreen?
     private var backgroundEffect: NSVisualEffectView!
 
     init() {
@@ -23,9 +24,14 @@ class DesktopWidget: NSWindow {
         let height = CGFloat(visibleLines) * 36 + 32
         let origin: NSPoint
         if AppConfig.get(AppConfig.Widget.hasCustomPosition) {
-            let cx = CGFloat(AppConfig.get(AppConfig.Widget.customCenterX))
-            let y = CGFloat(AppConfig.get(AppConfig.Widget.customY))
-            origin = NSPoint(x: cx - width / 2, y: y)
+            let rx = CGFloat(AppConfig.get(AppConfig.Widget.customCenterX))
+            let ry = CGFloat(AppConfig.get(AppConfig.Widget.customY))
+            if rx > 1.0 || ry > 1.0 {
+                origin = NSPoint(x: rx - width / 2, y: ry)
+            } else {
+                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
+                origin = NSPoint(x: abs.centerX - width / 2, y: abs.originY)
+            }
         } else {
             origin = NSPoint(x: screen.frame.width - width - 40, y: 100)
         }
@@ -47,6 +53,7 @@ class DesktopWidget: NSWindow {
         setupContent()
         applyTheme(ThemeManager.shared.theme)
         observeTheme()
+        currentScreen = screen
     }
 
     private func observeTheme() {
@@ -234,6 +241,50 @@ class DesktopWidget: NSWindow {
         mask.add(anim, forKey: "karaokeFill")
     }
 
+    // MARK: - Multi-Display
+
+    func moveToScreen(_ screen: NSScreen, animated: Bool = true) {
+        guard screen !== currentScreen else { return }
+        currentScreen = screen
+
+        let width: CGFloat = 400
+        let height = CGFloat(visibleLines) * 36 + 32
+        let newSize = NSSize(width: width, height: height)
+
+        let newOrigin: NSPoint
+        if AppConfig.get(AppConfig.Widget.hasCustomPosition) {
+            let rx = CGFloat(AppConfig.get(AppConfig.Widget.customCenterX))
+            let ry = CGFloat(AppConfig.get(AppConfig.Widget.customY))
+            if rx > 1.0 || ry > 1.0 {
+                newOrigin = NSPoint(x: screen.frame.width - width - 40, y: 100)
+            } else {
+                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
+                newOrigin = NSPoint(x: abs.centerX - width / 2, y: abs.originY)
+            }
+        } else {
+            newOrigin = NSPoint(x: screen.frame.width - width - 40, y: 100)
+        }
+
+        let newFrame = NSRect(origin: newOrigin, size: newSize)
+
+        if animated && alphaValue > 0 {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                self?.setFrame(newFrame, display: true)
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.15
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    self?.animator().alphaValue = 1
+                }
+            }
+        } else {
+            setFrame(newFrame, display: true)
+        }
+    }
+
     // MARK: - Edit Mode (drag via menu bar toggle)
 
     func toggleEditMode() {
@@ -263,13 +314,18 @@ class DesktopWidget: NSWindow {
         guard isEditMode else { return }
 
         AppConfig.set(AppConfig.Widget.hasCustomPosition, true)
-        AppConfig.set(AppConfig.Widget.customCenterX, frame.midX)
-        AppConfig.set(AppConfig.Widget.customY, frame.origin.y)
+        if let screen = self.screen ?? currentScreen {
+            let rel = ScreenDetector.absoluteToRelative(centerX: frame.midX, originY: frame.origin.y, on: screen)
+            AppConfig.set(AppConfig.Widget.customCenterX, rel.relativeX)
+            AppConfig.set(AppConfig.Widget.customY, rel.relativeY)
+        } else {
+            AppConfig.set(AppConfig.Widget.customCenterX, frame.midX)
+            AppConfig.set(AppConfig.Widget.customY, frame.origin.y)
+        }
 
         isEditMode = false
         ignoresMouseEvents = true
         isMovableByWindowBackground = false
-        // Return to desktop level
         self.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)) + 1)
         self.collectionBehavior = [.canJoinAllSpaces, .stationary]
 
