@@ -116,6 +116,10 @@ struct SettingsContentView: View {
 
 struct GeneralTab: View {
     @ObservedObject var settings: SettingsManager
+    @State private var overlayBehavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Overlay.displayBehavior)) ?? .followMouse
+    @State private var widgetBehavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Widget.displayBehavior)) ?? .followMouse
+    @State private var overlayPinnedScreen = AppConfig.get(AppConfig.Overlay.pinnedScreenIndex)
+    @State private var widgetPinnedScreen = AppConfig.get(AppConfig.Widget.pinnedScreenIndex)
 
     var body: some View {
         Form {
@@ -129,6 +133,50 @@ struct GeneralTab: View {
                             NotificationCenter.default.post(name: .displayModesChanged, object: nil)
                         }
                     ))
+                }
+            }
+
+            Section("Multi-Display") {
+                Picker("Overlay display behavior", selection: $overlayBehavior) {
+                    ForEach(DisplayBehavior.allCases, id: \.rawValue) { behavior in
+                        Text(behavior.rawValue).tag(behavior)
+                    }
+                }
+                .onChange(of: overlayBehavior) { newValue in
+                    AppConfig.set(AppConfig.Overlay.displayBehavior, newValue.rawValue)
+                    NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+                }
+
+                if overlayBehavior == .pinToScreen {
+                    Picker("Pin overlay to", selection: $overlayPinnedScreen) {
+                        ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { index, screen in
+                            Text(screen.localizedName).tag(index)
+                        }
+                    }
+                    .onChange(of: overlayPinnedScreen) { newValue in
+                        AppConfig.set(AppConfig.Overlay.pinnedScreenIndex, newValue)
+                    }
+                }
+
+                Picker("Widget display behavior", selection: $widgetBehavior) {
+                    ForEach(DisplayBehavior.allCases, id: \.rawValue) { behavior in
+                        Text(behavior.rawValue).tag(behavior)
+                    }
+                }
+                .onChange(of: widgetBehavior) { newValue in
+                    AppConfig.set(AppConfig.Widget.displayBehavior, newValue.rawValue)
+                    NotificationCenter.default.post(name: .displayModesChanged, object: nil)
+                }
+
+                if widgetBehavior == .pinToScreen {
+                    Picker("Pin widget to", selection: $widgetPinnedScreen) {
+                        ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { index, screen in
+                            Text(screen.localizedName).tag(index)
+                        }
+                    }
+                    .onChange(of: widgetPinnedScreen) { newValue in
+                        AppConfig.set(AppConfig.Widget.pinnedScreenIndex, newValue)
+                    }
                 }
             }
 
