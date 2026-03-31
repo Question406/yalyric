@@ -20,6 +20,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hasShownOnboarding = false
     private var hasEverPlayed = false
     private var allDisplaysHidden = false
+    private var additionalOverlays: [OverlayWindow] = []
+    private var additionalWidgets: [DesktopWidget] = []
 
     private enum DisplayState: Equatable {
         case noTrack, nonMusic, permissionDenied, loading, noLyrics, intro, lyrics
@@ -47,6 +49,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self, selector: #selector(displayModesDidChange),
             name: .displayModesChanged, object: nil
         )
+
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(screenParametersDidChange),
+            name: NSApplication.didChangeScreenParametersNotification, object: nil
+        )
     }
 
     private func setupDisplayModes() {
@@ -65,6 +72,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             overlayWindow?.orderOut(nil)
             overlayWindow = nil
+            for w in additionalOverlays { w.orderOut(nil) }
+            additionalOverlays.removeAll()
         }
 
         if modes.contains(.desktop) {
@@ -74,6 +83,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             desktopWidget?.orderOut(nil)
             desktopWidget = nil
+            for w in additionalWidgets { w.orderOut(nil) }
+            additionalWidgets.removeAll()
         }
 
 
@@ -106,11 +117,29 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleOverlayEditMode() {
-        overlayWindow?.toggleEditMode()
+        let behavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Overlay.displayBehavior)) ?? .followMouse
+        if behavior == .showOnAll {
+            let mouse = NSEvent.mouseLocation
+            let allOverlays = [overlayWindow].compactMap { $0 } + additionalOverlays
+            if let target = allOverlays.first(where: { $0.screen?.frame.contains(mouse) == true }) {
+                target.toggleEditMode()
+            }
+        } else {
+            overlayWindow?.toggleEditMode()
+        }
     }
 
     @objc private func toggleWidgetEditMode() {
-        desktopWidget?.toggleEditMode()
+        let behavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Widget.displayBehavior)) ?? .followMouse
+        if behavior == .showOnAll {
+            let mouse = NSEvent.mouseLocation
+            let allWidgets = [desktopWidget].compactMap { $0 } + additionalWidgets
+            if let target = allWidgets.first(where: { $0.screen?.frame.contains(mouse) == true }) {
+                target.toggleEditMode()
+            }
+        } else {
+            desktopWidget?.toggleEditMode()
+        }
     }
 
     public func menuNeedsUpdate(_ menu: NSMenu) {
@@ -137,6 +166,110 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func displayModesDidChange() {
         setupDisplayModes()
+    }
+
+    @objc private func screenParametersDidChange() {
+        let screens = NSScreen.screens
+        let overlayPinned = AppConfig.get(AppConfig.Overlay.pinnedScreenIndex)
+        if overlayPinned >= screens.count {
+            AppConfig.set(AppConfig.Overlay.pinnedScreenIndex, 0)
+        }
+        let widgetPinned = AppConfig.get(AppConfig.Widget.pinnedScreenIndex)
+        if widgetPinned >= screens.count {
+            AppConfig.set(AppConfig.Widget.pinnedScreenIndex, 0)
+        }
+        reconcileShowOnAll()
+        lastDisplayedLineIndex = -2
+    }
+
+    private func reconcileShowOnAll() {
+        let screens = NSScreen.screens
+
+        // Overlay
+        let overlayBehavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Overlay.displayBehavior)) ?? .followMouse
+        if overlayBehavior == .showOnAll && overlayWindow != nil {
+            let needed = screens.count - 1
+            while additionalOverlays.count < needed {
+                let w = OverlayWindow()
+                w.orderFront(nil)
+                additionalOverlays.append(w)
+            }
+            while additionalOverlays.count > needed {
+                let w = additionalOverlays.removeLast()
+                w.orderOut(nil)
+            }
+            if let primary = screens.first {
+                overlayWindow?.moveToScreen(primary, animated: false)
+            }
+            for (i, overlay) in additionalOverlays.enumerated() {
+                let screenIndex = i + 1
+                if screenIndex < screens.count {
+                    overlay.moveToScreen(screens[screenIndex], animated: false)
+                }
+            }
+        } else {
+            for w in additionalOverlays { w.orderOut(nil) }
+            additionalOverlays.removeAll()
+        }
+
+        // Widget
+        let widgetBehavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Widget.displayBehavior)) ?? .followMouse
+        if widgetBehavior == .showOnAll && desktopWidget != nil {
+            let needed = screens.count - 1
+            while additionalWidgets.count < needed {
+                let w = DesktopWidget()
+                w.orderFront(nil)
+                additionalWidgets.append(w)
+            }
+            while additionalWidgets.count > needed {
+                let w = additionalWidgets.removeLast()
+                w.orderOut(nil)
+            }
+            if let primary = screens.first {
+                desktopWidget?.moveToScreen(primary, animated: false)
+            }
+            for (i, widget) in additionalWidgets.enumerated() {
+                let screenIndex = i + 1
+                if screenIndex < screens.count {
+                    widget.moveToScreen(screens[screenIndex], animated: false)
+                }
+            }
+        } else {
+            for w in additionalWidgets { w.orderOut(nil) }
+            additionalWidgets.removeAll()
+        }
+    }
+
+    private func updateScreenTargets() {
+        if let overlay = overlayWindow, !overlay.isEditMode {
+            let behavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Overlay.displayBehavior)) ?? .followMouse
+            if behavior == .showOnAll {
+                reconcileShowOnAll()
+            } else {
+                let target = ScreenDetector.targetScreen(behavior: behavior, pinnedIndex: AppConfig.get(AppConfig.Overlay.pinnedScreenIndex))
+                overlay.moveToScreen(target)
+            }
+        }
+
+        if let widget = desktopWidget, !widget.isEditMode {
+            let behavior = DisplayBehavior(rawValue: AppConfig.get(AppConfig.Widget.displayBehavior)) ?? .followMouse
+            if behavior == .showOnAll {
+                reconcileShowOnAll()
+            } else {
+                let target = ScreenDetector.targetScreen(behavior: behavior, pinnedIndex: AppConfig.get(AppConfig.Widget.pinnedScreenIndex))
+                widget.moveToScreen(target)
+            }
+        }
+    }
+
+    private func forEachOverlay(_ action: (OverlayWindow) -> Void) {
+        if let primary = overlayWindow { action(primary) }
+        for overlay in additionalOverlays { action(overlay) }
+    }
+
+    private func forEachWidget(_ action: (DesktopWidget) -> Void) {
+        if let primary = desktopWidget { action(primary) }
+        for widget in additionalWidgets { action(widget) }
     }
 
     private func setupBindings() {
@@ -262,6 +395,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func updateAllDisplays() {
         guard !allDisplaysHidden else { return }
+        updateScreenTargets()
         let currentLine = syncEngine.currentLine
         let nextLine = syncEngine.nextLine
         let index = syncEngine.currentLineIndex
@@ -295,48 +429,48 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastDisplayedLineIndex = index
 
         if playerManager.permissionDenied {
-            overlayWindow?.updateSource(nil)
-            overlayWindow?.showTrackInfo(
+            forEachOverlay { $0.updateSource(nil) }
+            forEachOverlay { $0.showTrackInfo(
                 title: "Automation permission needed",
                 artist: "System Settings → Privacy → Automation → enable Spotify for yalyric"
-            )
+            ) }
             menuBarController?.updateCurrentLine("Permission needed")
             return
         }
 
         if let nonMusicTitle = playerManager.nonMusicTitle, track == nil {
             // Podcast, DJ interlude, or ad — hide overlay, show title in menu bar
-            overlayWindow?.updateSource(nil)
-            overlayWindow?.updateLyrics(current: "", next: "")
+            forEachOverlay { $0.updateSource(nil) }
+            forEachOverlay { $0.updateLyrics(current: "", next: "") }
             menuBarController?.updateCurrentLine("🎙 \(nonMusicTitle)")
             return
         }
 
         if track == nil {
             // No track playing
-            overlayWindow?.updateSource(nil)
-            overlayWindow?.updateLyrics(current: "", next: "")
+            forEachOverlay { $0.updateSource(nil) }
+            forEachOverlay { $0.updateLyrics(current: "", next: "") }
             menuBarController?.updateCurrentLine("")
             return
         }
 
         if lyricsManager.isFetching {
             // Still loading lyrics — show track info
-            overlayWindow?.updateSource(nil)
-            overlayWindow?.showTrackInfo(
+            forEachOverlay { $0.updateSource(nil) }
+            forEachOverlay { $0.showTrackInfo(
                 title: track!.name,
                 artist: track!.artist
-            )
+            ) }
             menuBarController?.updateCurrentLine(track!.name)
             return
         }
 
         if lyricsManager.errorMessage != nil {
             // No lyrics found — show track info with hint
-            overlayWindow?.showTrackInfo(
+            forEachOverlay { $0.showTrackInfo(
                 title: track!.name,
                 artist: "\(track!.artist) · No lyrics available"
-            )
+            ) }
             menuBarController?.updateCurrentLine(track!.name)
             return
         }
@@ -344,25 +478,25 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if index == -1 && playerManager.isPlaying {
             // Before first lyric line (intro) — show track info
             let firstLine = lines.first?.text ?? ""
-            overlayWindow?.showTrackInfo(
+            forEachOverlay { $0.showTrackInfo(
                 title: track!.name,
                 artist: firstLine.isEmpty ? track!.artist : "♪ \(track!.artist)"
-            )
+            ) }
             menuBarController?.updateCurrentLine(track!.name)
             menuBarController?.updateLyrics(lines: lines, currentIndex: index)
-            desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
+            forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index) }
             return
         }
 
         // Normal lyrics display
         let isSynced = lyricsManager.currentLyrics?.isSynced ?? false
-        overlayWindow?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
+        forEachOverlay { $0.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced) }
         menuBarController?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
-        overlayWindow?.updateLyrics(current: currentLine, next: nextLine)
-        overlayWindow?.updateProgress(syncEngine.progress)
+        forEachOverlay { $0.updateLyrics(current: currentLine, next: nextLine) }
+        forEachOverlay { $0.updateProgress(syncEngine.progress) }
         menuBarController?.updateProgress(syncEngine.progress)
-        desktopWidget?.updateLyrics(lines: lines, currentIndex: index)
-        desktopWidget?.updateProgress(syncEngine.progress)
+        forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index) }
+        forEachWidget { $0.updateProgress(syncEngine.progress) }
 
         if playerManager.isPlaying {
             menuBarController?.updateCurrentLine(currentLine, isSynced: isSynced)
@@ -391,6 +525,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 self.overlayWindow?.animator().alphaValue = 0
                 self.desktopWidget?.animator().alphaValue = 0
+                for overlay in self.additionalOverlays { overlay.animator().alphaValue = 0 }
+                for widget in self.additionalWidgets { widget.animator().alphaValue = 0 }
             }
             menuBarController?.updateCurrentLine("")
         } else {
@@ -399,6 +535,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 self.overlayWindow?.animator().alphaValue = 1
                 self.desktopWidget?.animator().alphaValue = 1
+                for overlay in self.additionalOverlays { overlay.animator().alphaValue = 1 }
+                for widget in self.additionalWidgets { widget.animator().alphaValue = 1 }
             }
             isOverlayHidden = false
             lastDisplayedLineIndex = -2  // force redraw
@@ -419,6 +557,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         playerManager.stopPolling()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
+        for w in additionalOverlays { w.orderOut(nil) }
+        additionalOverlays.removeAll()
+        for w in additionalWidgets { w.orderOut(nil) }
+        additionalWidgets.removeAll()
         NotificationCenter.default.removeObserver(self)
     }
 }
