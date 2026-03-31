@@ -2,15 +2,17 @@
 
 > From working demo to a real app people want to use.
 
-## Current State (v0.2.2)
+## Current State (v0.2.3)
 
 What works today:
 - Spotify + Apple Music detection via AppleScript (auto-detects active player)
 - Lyrics fetching from 4 sources in parallel (LRCLIB, Spotify internal, Musixmatch, NetEase)
 - Smart scoring: synced(+3), language match(+1), line count(+1), early return on perfect score
 - 3 display modes (overlay, desktop widget, menu bar popover)
-- SwiftUI settings with 3 tabs (General, Appearance, Sources)
+- SwiftUI settings with 4 tabs (General, Appearance, Sources, Shortcuts)
 - 6 theme presets + full customization (font, color, transitions, background styles)
+- Global keyboard shortcuts (⌃⌥ prefix, Carbon Hot Keys, no accessibility permission)
+- Multi-display support: 4 modes (Follow Mouse, Follow Focused Window, Pin to Screen, Show on All) — awaiting multi-monitor testing
 - Karaoke fill (horizontal gradient sweep on current line)
 - Draggable overlay + widget positioning with custom position persistence
 - Auto-hide overlay on pause (configurable delay)
@@ -66,23 +68,47 @@ What works today:
 
 ## Completed (P1 — Settings & Performance)
 
-- [x] SwiftUI settings (NSHostingController) with 3 tabs
+- [x] SwiftUI settings (NSHostingController) with 4 tabs
 - [x] LRU memory cache (50) + disk cache (200) with eviction
 - [x] Log file with rotation (2MB max)
 - [x] Apple Music support
+
+## Completed (P1 — Keyboard Shortcuts)
+
+- [x] Global hotkey to toggle overlay visibility (⌃⌥L)
+- [x] Global hotkey to toggle all displays (⌃⌥H)
+- [x] Nudge lyric offset +0.5s / -0.5s via hotkey (⌃⌥→ / ⌃⌥←)
+- [x] Reset offset via hotkey (⌃⌥0)
+- [x] Settings UI: Shortcuts tab with enable toggle and key binding display
+- [x] TOML config for customizing key bindings
+- [x] Carbon Hot Keys API (no accessibility permission required)
+
+## Completed (P1 — Multi-Display Support)
+
+- [x] 4 display behavior modes (Follow Mouse, Follow Focused Window, Pin to Screen, Show on All)
+- [x] Independent config for overlay and widget
+- [x] Relative position storage for cross-screen compatibility
+- [x] Monitor hot-plug handling (didChangeScreenParametersNotification)
+- [x] Settings UI with display behavior pickers
+- [x] No new permissions required (polling-based detection)
 
 ---
 
 ## Up Next
 
-### Keyboard Shortcuts (P1)
-**Why:** Power users need quick access without clicking the menu bar.
+### Multi-Display Testing (P1) ⏳
+**Why:** Multi-display support is implemented but needs real multi-monitor testing.
 
-- [ ] Global hotkey to toggle overlay visibility (e.g., ⌘⇧L)
-- [ ] Global hotkey to toggle all displays
-- [ ] Nudge lyric offset +0.5s / -0.5s via hotkey
-- [ ] Open/close lyrics popover via hotkey
-- [ ] Settings UI for customizing key bindings
+- [x] Follow Mouse mode (overlay follows mouse cursor between monitors)
+- [x] Follow Focused Window mode (overlay follows NSScreen.main)
+- [x] Pin to Screen mode (user picks specific monitor)
+- [x] Show on All mode (one instance per screen)
+- [x] Relative position storage (custom positions transfer across screens)
+- [x] Monitor hot-plug handling
+- [x] Settings UI with per-display-mode config for overlay and widget
+- [ ] Manual testing on multi-monitor setup
+- [ ] Verify crossfade animation when moving between screens
+- [ ] Verify "Show on All" edit mode targets correct window
 
 ### Word-Level Karaoke (P2)
 **Why:** Per-word highlighting is a major visual upgrade over per-line fill.
@@ -119,7 +145,6 @@ What works today:
 
 ### System Integration
 - [ ] Launch at login (SMAppService)
-- [ ] Multi-monitor: choose which screen for overlay
 - [ ] Retry failed fetches once after 2s
 
 ### Local Lyrics
