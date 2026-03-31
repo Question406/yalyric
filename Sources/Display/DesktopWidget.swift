@@ -9,6 +9,7 @@ class DesktopWidget: NSWindow {
     private var cancellables = Set<AnyCancellable>()
     private var lastCurrentIndex: Int = -2
     private var gradientMask: CAGradientLayer?
+    private var highlightWordStack: WordStackView?
     private(set) var isEditMode = false
     private var editBorderLayer: CAShapeLayer?
     private(set) weak var currentScreen: NSScreen?
@@ -96,20 +97,34 @@ class DesktopWidget: NSWindow {
             stackView.removeArrangedSubview(label)
             label.removeFromSuperview()
         }
+        if let ws = highlightWordStack {
+            stackView.removeArrangedSubview(ws)
+            ws.removeFromSuperview()
+        }
         lineLabels.removeAll()
+        highlightWordStack = nil
+        gradientMask = nil
 
-        for _ in 0..<visibleLines {
-            let label = NSTextField(labelWithString: "")
-            label.alignment = .center
-            label.maximumNumberOfLines = 1
-            label.lineBreakMode = .byTruncatingTail
-            label.isBezeled = false
-            label.drawsBackground = false
-            label.isEditable = false
-            label.isSelectable = false
-            label.wantsLayer = true
-            lineLabels.append(label)
-            stackView.addArrangedSubview(label)
+        for i in 0..<visibleLines {
+            if i == currentHighlightIndex {
+                let ws = WordStackView()
+                ws.translatesAutoresizingMaskIntoConstraints = false
+                highlightWordStack = ws
+                lineLabels.append(NSTextField(labelWithString: ""))  // placeholder for index tracking
+                stackView.addArrangedSubview(ws)
+            } else {
+                let label = NSTextField(labelWithString: "")
+                label.alignment = .center
+                label.maximumNumberOfLines = 1
+                label.lineBreakMode = .byTruncatingTail
+                label.isBezeled = false
+                label.drawsBackground = false
+                label.isEditable = false
+                label.isSelectable = false
+                label.wantsLayer = true
+                lineLabels.append(label)
+                stackView.addArrangedSubview(label)
+            }
         }
     }
 
@@ -133,31 +148,57 @@ class DesktopWidget: NSWindow {
 
         for (i, label) in lineLabels.enumerated() {
             if i == currentHighlightIndex {
-                label.font = theme.currentLineFont
-                label.textColor = theme.textColor
+                // WordStackView handles highlight theming
             } else {
                 label.font = theme.nextLineFont
                 label.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
             }
         }
-        applyKaraokeFill(theme)
+
+        if let ws = highlightWordStack {
+            let wordTexts = ws.wordLabels.map { $0.stringValue }
+            if !wordTexts.isEmpty {
+                ws.setWords(
+                    wordTexts,
+                    font: theme.currentLineFont,
+                    textColor: theme.textColor,
+                    letterSpacing: theme.letterSpacing,
+                    shadow: theme.textShadow,
+                    karaokeFillEnabled: theme.karaokeFillEnabled
+                )
+            }
+        }
     }
 
-    func updateLyrics(lines: [LyricLine], currentIndex: Int) {
+    func updateLyrics(lines: [LyricLine], currentIndex: Int, words: [String] = []) {
         let theme = ThemeManager.shared.theme
         let lineChanged = currentIndex != lastCurrentIndex
         lastCurrentIndex = currentIndex
 
-        // Reset karaoke fill on line change
-        if lineChanged, let mask = gradientMask {
-            mask.removeAnimation(forKey: "karaokeFill")
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            mask.locations = [0, 0, NSNumber(value: Float(theme.fillEdgeWidth)), 1]
-            CATransaction.commit()
-        }
-
         for i in 0..<visibleLines {
+            if i == currentHighlightIndex {
+                let lineIndex = currentIndex - currentHighlightIndex + i
+                let text = (lineIndex >= 0 && lineIndex < lines.count) ? lines[lineIndex].text : ""
+                if let ws = highlightWordStack {
+                    let wordTexts = words.isEmpty ? (text.isEmpty ? [] : [text]) : words
+                    if !wordTexts.isEmpty {
+                        ws.setWords(
+                            wordTexts,
+                            font: theme.currentLineFont,
+                            textColor: theme.textColor,
+                            letterSpacing: theme.letterSpacing,
+                            shadow: theme.textShadow,
+                            karaokeFillEnabled: theme.karaokeFillEnabled
+                        )
+                    }
+                }
+                // Reset karaoke on line change
+                if lineChanged, let ws = highlightWordStack {
+                    ws.resetMasks(fillEdgeWidth: ThemeManager.shared.theme.fillEdgeWidth)
+                }
+                continue  // skip the normal label handling for this index
+            }
+
             let lineIndex = currentIndex - currentHighlightIndex + i
             let text = (lineIndex >= 0 && lineIndex < lines.count) ? lines[lineIndex].text : ""
 
@@ -172,7 +213,7 @@ class DesktopWidget: NSWindow {
                         label.stringValue = text
                         NSAnimationContext.runAnimationGroup { ctx in
                             ctx.duration = 0.15
-                            label.animator().alphaValue = (i == self.currentHighlightIndex) ? 1.0 : theme.nextLineOpacity
+                            label.animator().alphaValue = theme.nextLineOpacity
                         }
                     }
                 } else {
@@ -180,65 +221,21 @@ class DesktopWidget: NSWindow {
                 }
             }
 
-            if i == currentHighlightIndex {
-                lineLabels[i].font = theme.currentLineFont
-                lineLabels[i].textColor = theme.textColor
-            } else {
-                lineLabels[i].font = theme.nextLineFont
-                lineLabels[i].textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
-            }
+            lineLabels[i].font = theme.nextLineFont
+            lineLabels[i].textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
         }
     }
 
     // MARK: - Karaoke Fill
 
-    private func applyKaraokeFill(_ theme: Theme) {
-        let highlightLabel = lineLabels[currentHighlightIndex]
-        if theme.karaokeFillEnabled {
-            if gradientMask == nil {
-                let mask = CAGradientLayer()
-                mask.startPoint = CGPoint(x: 0, y: 0.5)
-                mask.endPoint = CGPoint(x: 1, y: 0.5)
-                mask.colors = [NSColor.white.cgColor, NSColor.white.cgColor,
-                               NSColor.white.withAlphaComponent(0.35).cgColor,
-                               NSColor.white.withAlphaComponent(0.35).cgColor]
-                mask.locations = [0, 0, 0.001, 1]
-                highlightLabel.layer?.mask = mask
-                gradientMask = mask
-            }
-            gradientMask?.frame = highlightLabel.bounds
-        } else {
-            highlightLabel.layer?.mask = nil
-            gradientMask = nil
-        }
+    func updateWordProgresses(_ progresses: [Double]) {
+        let theme = ThemeManager.shared.theme
+        guard theme.karaokeFillEnabled, let ws = highlightWordStack else { return }
+        ws.updateProgresses(progresses, fillEdgeWidth: theme.fillEdgeWidth, animated: true)
     }
 
     func updateProgress(_ progress: Double) {
-        let theme = ThemeManager.shared.theme
-        guard theme.karaokeFillEnabled else { return }
-
-        let highlightLabel = lineLabels[currentHighlightIndex]
-        guard let mask = highlightLabel.layer?.mask as? CAGradientLayer else { return }
-
-        mask.frame = highlightLabel.bounds
-
-        let p = Float(max(0, min(1, progress)))
-        let edge = Float(theme.fillEdgeWidth)
-        let newLocations: [NSNumber] = [0, NSNumber(value: p), NSNumber(value: p + edge), 1]
-
-        let anim = CABasicAnimation(keyPath: "locations")
-        anim.fromValue = mask.presentation()?.locations ?? mask.locations
-        anim.toValue = newLocations
-        anim.duration = 0.5
-        anim.timingFunction = CAMediaTimingFunction(name: .linear)
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .forwards
-
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        mask.locations = newLocations
-        CATransaction.commit()
-        mask.add(anim, forKey: "karaokeFill")
+        // Word-level progress handled by updateWordProgresses()
     }
 
     // MARK: - Multi-Display
