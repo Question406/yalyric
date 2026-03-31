@@ -28,6 +28,7 @@ class OverlayWindow: NSWindow {
     private(set) var isEditMode = false
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
+    private(set) weak var currentScreen: NSScreen?
 
     // Karaoke fill gradient masks
     private var gradientMaskA: CAGradientLayer?
@@ -41,10 +42,17 @@ class OverlayWindow: NSWindow {
         // Use saved custom position if available, otherwise use preset
         let origin: NSPoint
         if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let cx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
-            let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
-            origin = NSPoint(x: cx - size.width / 2, y: y)
-            anchoredCenterX = cx
+            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
+            // If values are > 1.0, they're legacy absolute coords — convert
+            if rx > 1.0 || ry > 1.0 {
+                origin = NSPoint(x: rx - size.width / 2, y: ry)
+                anchoredCenterX = rx
+            } else {
+                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
+                origin = NSPoint(x: abs.centerX - size.width / 2, y: abs.originY)
+                anchoredCenterX = abs.centerX
+            }
         } else {
             origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
             anchoredCenterX = origin.x + size.width / 2
@@ -69,6 +77,7 @@ class OverlayWindow: NSWindow {
         applyTheme(theme)
         observeTheme()
         setupMouseTracking()
+        currentScreen = screen
     }
 
     private func setupMouseTracking() {
@@ -130,11 +139,19 @@ class OverlayWindow: NSWindow {
     func lockPosition() {
         guard isEditMode else { return }
 
-        // Save center X (not origin) so dynamic width doesn't shift position on reload
         anchoredCenterX = frame.midX
         AppConfig.set(AppConfig.Overlay.hasCustomPosition, true)
-        AppConfig.set(AppConfig.Overlay.customCenterX, anchoredCenterX)
-        AppConfig.set(AppConfig.Overlay.customY, frame.origin.y)
+
+        // Save as relative coordinates for cross-screen compatibility
+        if let screen = self.screen ?? currentScreen {
+            let rel = ScreenDetector.absoluteToRelative(centerX: frame.midX, originY: frame.origin.y, on: screen)
+            AppConfig.set(AppConfig.Overlay.customCenterX, rel.relativeX)
+            AppConfig.set(AppConfig.Overlay.customY, rel.relativeY)
+        } else {
+            // Fallback: save absolute (legacy behavior)
+            AppConfig.set(AppConfig.Overlay.customCenterX, anchoredCenterX)
+            AppConfig.set(AppConfig.Overlay.customY, frame.origin.y)
+        }
 
         isEditMode = false
         ignoresMouseEvents = true
@@ -325,8 +342,19 @@ class OverlayWindow: NSWindow {
 
         // Check for user-saved custom position (stored independently from theme)
         if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let centerX = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
-            let y = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
+            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
+            let targetScreen = currentScreen ?? screen
+            let centerX: CGFloat
+            let y: CGFloat
+            if rx > 1.0 || ry > 1.0 {
+                centerX = rx
+                y = ry
+            } else {
+                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: targetScreen)
+                centerX = abs.centerX
+                y = abs.originY
+            }
             let x = centerX - newSize.width / 2
             anchoredCenterX = centerX
             setFrame(NSRect(origin: NSPoint(x: x, y: y), size: newSize), display: true)
@@ -342,6 +370,58 @@ class OverlayWindow: NSWindow {
         }
         anchoredCenterX = origin.x + newSize.width / 2
         setFrame(NSRect(origin: origin, size: newSize), display: true)
+    }
+
+    // MARK: - Multi-Display
+
+    func moveToScreen(_ screen: NSScreen, animated: Bool = true) {
+        guard screen !== currentScreen else { return }
+        currentScreen = screen
+
+        let theme = ThemeManager.shared.theme
+        let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
+        let newSize = NSSize(width: width, height: 90)
+
+        let newOrigin: NSPoint
+        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
+            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
+            if rx > 1.0 || ry > 1.0 {
+                // Legacy absolute — just use preset on new screen
+                newOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+            } else {
+                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
+                newOrigin = NSPoint(x: abs.centerX - newSize.width / 2, y: abs.originY)
+            }
+        } else {
+            if theme.backgroundStyle == .bar {
+                let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+                newOrigin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
+            } else {
+                newOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
+            }
+        }
+
+        let newFrame = NSRect(origin: newOrigin, size: newSize)
+        anchoredCenterX = newOrigin.x + newSize.width / 2
+
+        if animated && alphaValue > 0 {
+            // Crossfade: fade out → reposition → fade in
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                self?.setFrame(newFrame, display: true)
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = 0.15
+                    ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                    self?.animator().alphaValue = 1
+                }
+            }
+        } else {
+            setFrame(newFrame, display: true)
+        }
     }
 
     // MARK: - Dynamic Width
