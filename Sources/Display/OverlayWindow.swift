@@ -3,11 +3,15 @@ import QuartzCore
 import Combine
 
 class OverlayWindow: NSWindow {
-    private let currentLabelA = NSTextField(labelWithString: "")
-    private let currentLabelB = NSTextField(labelWithString: "")
+    private let wordStackA = WordStackView()
+    private let wordStackB = WordStackView()
     private let nextLyricLabel = NSTextField(labelWithString: "")
     private let sourceLabel = NSTextField(labelWithString: "")
     private var useA = true
+
+    private func currentText(of stack: WordStackView) -> String {
+        stack.wordLabels.map { $0.stringValue }.joined()
+    }
 
     private var currentTopA: NSLayoutConstraint!
     private var currentTopB: NSLayoutConstraint!
@@ -29,10 +33,6 @@ class OverlayWindow: NSWindow {
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
     private(set) weak var currentScreen: NSScreen?
-
-    // Karaoke fill gradient masks
-    private var gradientMaskA: CAGradientLayer?
-    private var gradientMaskB: CAGradientLayer?
 
     init() {
         let theme = ThemeManager.shared.theme
@@ -187,10 +187,10 @@ class OverlayWindow: NSWindow {
         container.autoresizingMask = [.width, .height]
         container.wantsLayer = true
 
-        configureLabel(currentLabelA)
-        currentLabelA.alphaValue = 1
-        configureLabel(currentLabelB)
-        currentLabelB.alphaValue = 0
+        wordStackA.translatesAutoresizingMaskIntoConstraints = false
+        wordStackA.alphaValue = 1
+        wordStackB.translatesAutoresizingMaskIntoConstraints = false
+        wordStackB.alphaValue = 0
         configureLabel(nextLyricLabel)
 
         configureLabel(sourceLabel)
@@ -199,21 +199,21 @@ class OverlayWindow: NSWindow {
         sourceLabel.alignment = .right
         sourceLabel.alphaValue = 0
 
-        container.addSubview(currentLabelA)
-        container.addSubview(currentLabelB)
+        container.addSubview(wordStackA)
+        container.addSubview(wordStackB)
         container.addSubview(nextLyricLabel)
         container.addSubview(sourceLabel)
 
-        currentTopA = currentLabelA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
-        currentTopB = currentLabelB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
+        currentTopA = wordStackA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
+        currentTopB = wordStackB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
 
         NSLayoutConstraint.activate([
-            currentLabelA.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            currentLabelA.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            wordStackA.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            wordStackA.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             currentTopA,
 
-            currentLabelB.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
-            currentLabelB.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
+            wordStackB.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            wordStackB.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             currentTopB,
 
             nextLyricLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
@@ -232,21 +232,18 @@ class OverlayWindow: NSWindow {
     func applyTheme(_ theme: Theme) {
         let shadow = theme.textShadow
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-
-        for label in [currentLabelA, currentLabelB] {
-            label.font = theme.currentLineFont
-            label.textColor = theme.textColor
-            label.shadow = shadow
-            label.layer?.setAffineTransform(.identity)
-            let str = NSMutableAttributedString(string: label.stringValue)
-            let range = NSRange(location: 0, length: str.length)
-            str.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
-            if theme.letterSpacing != 0 {
-                str.addAttribute(.kern, value: theme.letterSpacing, range: range)
+        for stack in [wordStackA, wordStackB] {
+            let wordTexts = stack.wordLabels.map { $0.stringValue }
+            if !wordTexts.isEmpty {
+                stack.setWords(
+                    wordTexts,
+                    font: theme.currentLineFont,
+                    textColor: theme.textColor,
+                    letterSpacing: theme.letterSpacing,
+                    shadow: shadow,
+                    karaokeFillEnabled: theme.karaokeFillEnabled
+                )
             }
-            label.attributedStringValue = str
         }
 
         nextLyricLabel.font = theme.nextLineFont
@@ -263,11 +260,9 @@ class OverlayWindow: NSWindow {
             applyPosition(theme)
         }
 
-        applyKaraokeFill(theme)
-
         // Re-apply dynamic width with current text (handles font/size changes)
-        let activeLabel = useA ? currentLabelA : currentLabelB
-        resizeToFit(currentText: activeLabel.stringValue, nextText: nextLyricLabel.stringValue, animated: false)
+        let activeStack = useA ? wordStackA : wordStackB
+        resizeToFit(currentText: currentText(of: activeStack), nextText: nextLyricLabel.stringValue, animated: false)
     }
 
     private func applyBackground(_ theme: Theme) {
@@ -290,7 +285,7 @@ class OverlayWindow: NSWindow {
             effect.layer?.cornerRadius = theme.backgroundCornerRadius
             effect.layer?.masksToBounds = true
             effect.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            container.addSubview(effect, positioned: .below, relativeTo: wordStackA)
             NSLayoutConstraint.activate([
                 effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -306,7 +301,7 @@ class OverlayWindow: NSWindow {
             bg.layer?.cornerRadius = theme.backgroundCornerRadius
             bg.alphaValue = theme.backgroundOpacity
             bg.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(bg, positioned: .below, relativeTo: currentLabelA)
+            container.addSubview(bg, positioned: .below, relativeTo: wordStackA)
             NSLayoutConstraint.activate([
                 bg.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 bg.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -322,7 +317,7 @@ class OverlayWindow: NSWindow {
             effect.state = .active
             effect.alphaValue = theme.backgroundOpacity
             effect.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(effect, positioned: .below, relativeTo: currentLabelA)
+            container.addSubview(effect, positioned: .below, relativeTo: wordStackA)
             NSLayoutConstraint.activate([
                 effect.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 effect.trailingAnchor.constraint(equalTo: container.trailingAnchor),
@@ -438,19 +433,14 @@ class OverlayWindow: NSWindow {
 
     private func resizeToFit(currentText: String, nextText: String, animated: Bool) {
         let theme = ThemeManager.shared.theme
-
-        // Bar mode stays full-width
         if theme.backgroundStyle == .bar { return }
 
-        let currentWidth = measureTextWidth(currentText, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
+        let activeStack = useA ? wordStackA : wordStackB
+        let currentWidth = activeStack.intrinsicTextWidth
         let nextWidth = measureTextWidth(nextText, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
-        let textWidth = max(currentWidth, nextWidth)
-        let targetWidth = min(
-            theme.overlayWidth,
-            max(minOverlayWidth, textWidth + horizontalPadding * 2)
-        )
+        let textWidth = max(currentWidth + horizontalPadding * 2, nextWidth + horizontalPadding * 2)
+        let targetWidth = min(theme.overlayWidth, max(minOverlayWidth, textWidth))
 
-        // Skip if target hasn't changed — prevents redundant animations
         guard abs(lastTargetWidth - targetWidth) > 2 else { return }
         lastTargetWidth = targetWidth
 
@@ -471,101 +461,36 @@ class OverlayWindow: NSWindow {
 
     // MARK: - Karaoke Fill
 
-    private func setupGradientMask(for label: NSTextField) -> CAGradientLayer {
-        let gradient = CAGradientLayer()
-        gradient.startPoint = CGPoint(x: 0, y: 0.5)
-        gradient.endPoint = CGPoint(x: 1, y: 0.5)
-        gradient.frame = label.bounds
-        // Start fully dim (unfilled)
-        gradient.colors = [NSColor.white.cgColor, NSColor.white.cgColor,
-                           NSColor.white.withAlphaComponent(0.35).cgColor,
-                           NSColor.white.withAlphaComponent(0.35).cgColor]
-        gradient.locations = [0, 0, 0.001, 1]
-        return gradient
-    }
-
-    private func applyKaraokeFill(_ theme: Theme) {
-        if theme.karaokeFillEnabled {
-            // Ensure layout is current before reading bounds
-            contentView?.layoutSubtreeIfNeeded()
-
-            // Create masks if needed
-            if gradientMaskA == nil {
-                let mask = setupGradientMask(for: currentLabelA)
-                currentLabelA.layer?.mask = mask
-                gradientMaskA = mask
-            }
-            if gradientMaskB == nil {
-                let mask = setupGradientMask(for: currentLabelB)
-                currentLabelB.layer?.mask = mask
-                gradientMaskB = mask
-            }
-            // Always sync mask frames to current label bounds
-            gradientMaskA?.frame = currentLabelA.bounds
-            gradientMaskB?.frame = currentLabelB.bounds
-        } else {
-            // Remove masks
-            currentLabelA.layer?.mask = nil
-            currentLabelB.layer?.mask = nil
-            gradientMaskA = nil
-            gradientMaskB = nil
-        }
-    }
-
     func updateProgress(_ progress: Double) {
+        // Word-level progress handled by updateWordProgresses()
+    }
+
+    func updateWordProgresses(_ progresses: [Double]) {
         let theme = ThemeManager.shared.theme
         guard theme.karaokeFillEnabled else { return }
-
-        let activeLabel = useA ? currentLabelA : currentLabelB
-        guard let mask = activeLabel.layer?.mask as? CAGradientLayer else { return }
-
-        // Update mask frame to match label
-        mask.frame = activeLabel.bounds
-
-        let p = Float(max(0, min(1, progress)))
-        let edge = Float(theme.fillEdgeWidth)
-        let newLocations: [NSNumber] = [0, NSNumber(value: p), NSNumber(value: p + edge), 1]
-
-        // Animate smoothly between poll updates (0.5s interval)
-        let anim = CABasicAnimation(keyPath: "locations")
-        anim.fromValue = mask.presentation()?.locations ?? mask.locations
-        anim.toValue = newLocations
-        anim.duration = 0.5
-        anim.timingFunction = CAMediaTimingFunction(name: .linear)
-        anim.isRemovedOnCompletion = false
-        anim.fillMode = .forwards
-
-        // Set model value and add animation
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        mask.locations = newLocations
-        CATransaction.commit()
-        mask.add(anim, forKey: "karaokeFill")
+        let activeStack = useA ? wordStackA : wordStackB
+        activeStack.updateProgresses(progresses, fillEdgeWidth: theme.fillEdgeWidth, animated: true)
     }
 
     // MARK: - Reset labels to clean state
 
     /// Cancel any in-flight animation and snap labels to a clean state
     private func resetLabelsToCleanState() {
-        // Remove all animations (including karaoke fill on masks)
-        currentLabelA.layer?.removeAllAnimations()
-        currentLabelB.layer?.removeAllAnimations()
-        gradientMaskA?.removeAnimation(forKey: "karaokeFill")
-        gradientMaskB?.removeAnimation(forKey: "karaokeFill")
+        wordStackA.layer?.removeAllAnimations()
+        wordStackB.layer?.removeAllAnimations()
 
         let restY: CGFloat = 8
-        let activeLabel = useA ? currentLabelA : currentLabelB
-        let hiddenLabel = useA ? currentLabelB : currentLabelA
+        let activeStack = useA ? wordStackA : wordStackB
+        let hiddenStack = useA ? wordStackB : wordStackA
         let activeTop = useA ? currentTopA! : currentTopB!
         let hiddenTop = useA ? currentTopB! : currentTopA!
 
-        // Snap: active visible at rest, hidden invisible at rest
-        activeLabel.alphaValue = 1
-        activeLabel.layer?.setAffineTransform(.identity)
+        activeStack.alphaValue = 1
+        activeStack.layer?.setAffineTransform(.identity)
         activeTop.constant = restY
 
-        hiddenLabel.alphaValue = 0
-        hiddenLabel.layer?.setAffineTransform(.identity)
+        hiddenStack.alphaValue = 0
+        hiddenStack.layer?.setAffineTransform(.identity)
         hiddenTop.constant = restY
 
         contentView?.layoutSubtreeIfNeeded()
@@ -574,46 +499,47 @@ class OverlayWindow: NSWindow {
 
     // MARK: - Lyrics Display
 
-    func updateLyrics(current: String, next: String) {
+    func updateLyrics(current: String, next: String, words: [String] = []) {
         let theme = ThemeManager.shared.theme
-        let activeLabel = useA ? currentLabelA : currentLabelB
+        let activeStack = useA ? wordStackA : wordStackB
 
-        if activeLabel.stringValue != current {
+        if currentText(of: activeStack) != current {
             // If a previous animation is still running, snap to clean state first
             if isAnimating {
                 resetLabelsToCleanState()
             }
 
-            let incomingLabel = useA ? currentLabelB : currentLabelA
+            let incomingStack = useA ? wordStackB : wordStackA
             let activeTop = useA ? currentTopA! : currentTopB!
             let incomingTop = useA ? currentTopB! : currentTopA!
             let restY: CGFloat = 8
 
-            incomingLabel.stringValue = current
+            let wordTexts = words.isEmpty ? [current] : words
+            incomingStack.setWords(
+                wordTexts,
+                font: theme.currentLineFont,
+                textColor: theme.textColor,
+                letterSpacing: theme.letterSpacing,
+                shadow: theme.textShadow,
+                karaokeFillEnabled: theme.karaokeFillEnabled
+            )
             resizeToFit(currentText: current, nextText: next, animated: theme.transitionStyle != .none)
 
-            // Reset karaoke fill on the incoming label to start from 0
-            if let mask = incomingLabel.layer?.mask as? CAGradientLayer {
-                mask.removeAnimation(forKey: "karaokeFill")
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                mask.frame = incomingLabel.bounds
-                mask.locations = [0, 0, NSNumber(value: Float(theme.fillEdgeWidth)), 1]
-                CATransaction.commit()
-            }
+            // Reset karaoke fill on the incoming stack to start from 0
+            incomingStack.resetMasks(fillEdgeWidth: theme.fillEdgeWidth)
 
             switch theme.transitionStyle {
             case .none:
-                activeLabel.alphaValue = 0
-                activeLabel.layer?.setAffineTransform(.identity)
+                activeStack.alphaValue = 0
+                activeStack.layer?.setAffineTransform(.identity)
                 activeTop.constant = restY
-                incomingLabel.alphaValue = 1
-                incomingLabel.layer?.setAffineTransform(.identity)
+                incomingStack.alphaValue = 1
+                incomingStack.layer?.setAffineTransform(.identity)
                 incomingTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
 
             case .crossfade:
-                incomingLabel.alphaValue = 0
+                incomingStack.alphaValue = 0
                 incomingTop.constant = restY
                 activeTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
@@ -621,14 +547,14 @@ class OverlayWindow: NSWindow {
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    activeLabel.animator().alphaValue = 0
-                    incomingLabel.animator().alphaValue = 1
+                    activeStack.animator().alphaValue = 0
+                    incomingStack.animator().alphaValue = 1
                 } completionHandler: { [weak self] in
                     self?.isAnimating = false
                 }
 
             case .slideUp:
-                incomingLabel.alphaValue = 0
+                incomingStack.alphaValue = 0
                 incomingTop.constant = restY + slideDistance
                 contentView?.layoutSubtreeIfNeeded()
                 isAnimating = true
@@ -637,51 +563,45 @@ class OverlayWindow: NSWindow {
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     ctx.allowsImplicitAnimation = true
                     activeTop.constant = restY - slideDistance
-                    activeLabel.animator().alphaValue = 0
+                    activeStack.animator().alphaValue = 0
                     incomingTop.constant = restY
-                    incomingLabel.animator().alphaValue = 1
+                    incomingStack.animator().alphaValue = 1
                     contentView?.layoutSubtreeIfNeeded()
                 } completionHandler: { [weak self] in
                     self?.isAnimating = false
                 }
 
             case .scaleFade:
-                // Old line shrinks away, new line grows in from slightly larger
-                incomingLabel.alphaValue = 0
+                incomingStack.alphaValue = 0
                 incomingTop.constant = restY
                 activeTop.constant = restY
                 contentView?.layoutSubtreeIfNeeded()
 
-                // Incoming starts bigger than normal
-                incomingLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.15, y: 1.15))
+                incomingStack.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.15, y: 1.15))
 
                 isAnimating = true
                 CATransaction.begin()
                 CATransaction.setAnimationDuration(theme.animationDuration)
                 CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeInEaseOut))
                 CATransaction.setCompletionBlock { [weak self] in
-                    activeLabel.layer?.setAffineTransform(.identity)
+                    activeStack.layer?.setAffineTransform(.identity)
                     self?.isAnimating = false
                 }
 
-                // Outgoing: shrink to 0.75 (noticeably smaller)
-                activeLabel.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.75, y: 0.75))
-                // Incoming: settle to normal size
-                incomingLabel.layer?.setAffineTransform(.identity)
+                activeStack.layer?.setAffineTransform(CGAffineTransform(scaleX: 0.75, y: 0.75))
+                incomingStack.layer?.setAffineTransform(.identity)
 
                 CATransaction.commit()
 
-                // Animate alpha via NSAnimationContext (works with animator proxy)
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = theme.animationDuration
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                    activeLabel.animator().alphaValue = 0
-                    incomingLabel.animator().alphaValue = 1
+                    activeStack.animator().alphaValue = 0
+                    incomingStack.animator().alphaValue = 1
                 }
 
             case .push:
-                // Both labels visible, slide simultaneously with fade
-                incomingLabel.alphaValue = 0
+                incomingStack.alphaValue = 0
                 incomingTop.constant = restY + slideDistance * 2
                 contentView?.layoutSubtreeIfNeeded()
                 isAnimating = true
@@ -690,9 +610,9 @@ class OverlayWindow: NSWindow {
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                     ctx.allowsImplicitAnimation = true
                     activeTop.constant = restY - slideDistance * 2
-                    activeLabel.animator().alphaValue = 0
+                    activeStack.animator().alphaValue = 0
                     incomingTop.constant = restY
-                    incomingLabel.animator().alphaValue = 1
+                    incomingStack.animator().alphaValue = 1
                     contentView?.layoutSubtreeIfNeeded()
                 } completionHandler: { [weak self] in
                     self?.isAnimating = false
@@ -703,8 +623,8 @@ class OverlayWindow: NSWindow {
         }
 
         if nextLyricLabel.stringValue != next {
-            let activeLabel = useA ? currentLabelA : currentLabelB
-            resizeToFit(currentText: activeLabel.stringValue, nextText: next, animated: true)
+            let activeStack = useA ? wordStackA : wordStackB
+            resizeToFit(currentText: currentText(of: activeStack), nextText: next, animated: true)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
