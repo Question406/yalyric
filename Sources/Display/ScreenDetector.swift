@@ -45,7 +45,8 @@ enum ScreenDetector {
 
     /// Stable display ID that survives NSScreen instance recreation.
     static func displayID(of screen: NSScreen) -> CGDirectDisplayID {
-        screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID ?? 0
+        guard let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else { return 0 }
+        return CGDirectDisplayID(screenNumber.uint32Value)
     }
 
     // MARK: - Relative Position Conversion
