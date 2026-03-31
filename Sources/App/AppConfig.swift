@@ -71,6 +71,14 @@ enum AppConfig {
                 ("offsetMinus", get(Shortcuts.offsetMinus)),
                 ("offsetReset", get(Shortcuts.offsetReset)),
             ]),
+            ("overlay", "Overlay display behavior", [
+                ("displayBehavior", get(Overlay.displayBehavior)),
+                ("pinnedScreenIndex", get(Overlay.pinnedScreenIndex)),
+            ]),
+            ("widget", "Widget display behavior", [
+                ("displayBehavior", get(Widget.displayBehavior)),
+                ("pinnedScreenIndex", get(Widget.pinnedScreenIndex)),
+            ]),
         ]
 
         var data: [String: [String: Any]] = [:]
@@ -140,6 +148,8 @@ enum AppConfig {
         static let hasCustomPosition = Key<Bool>("overlay.hasCustomPosition", default: false)
         static let customCenterX = Key<Double>("overlay.customCenterX", default: 0)
         static let customY = Key<Double>("overlay.customY", default: 0)
+        static let displayBehavior = Key<String>("overlay.displayBehavior", default: "Follow Mouse")
+        static let pinnedScreenIndex = Key<Int>("overlay.pinnedScreenIndex", default: 0)
     }
 
     // MARK: - Widget Position
@@ -148,6 +158,8 @@ enum AppConfig {
         static let hasCustomPosition = Key<Bool>("widget.hasCustomPosition", default: false)
         static let customCenterX = Key<Double>("widget.customCenterX", default: 0)
         static let customY = Key<Double>("widget.customY", default: 0)
+        static let displayBehavior = Key<String>("widget.displayBehavior", default: "Follow Mouse")
+        static let pinnedScreenIndex = Key<Int>("widget.pinnedScreenIndex", default: 0)
     }
 
     // MARK: - Shortcuts
