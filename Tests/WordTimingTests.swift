@@ -68,3 +68,85 @@ final class WordTimingTests: XCTestCase {
         XCTAssertEqual(words[0].offset, 0.0)
     }
 }
+
+@MainActor
+final class SyncEngineWordProgressTests: XCTestCase {
+
+    private func makeLyricsWithWords() -> Lyrics {
+        Lyrics(lines: [
+            LyricLine(time: 0.0, text: "Hello world tonight", words: [
+                WordTiming(text: "Hello", offset: 0.0),
+                WordTiming(text: "world", offset: 1.0),
+                WordTiming(text: "tonight", offset: 2.0),
+            ]),
+            LyricLine(time: 5.0, text: "Second line"),
+        ], source: .musixmatch, isSynced: true)
+    }
+
+    func testWordProgressesAtLineStart() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: 0.0)
+        XCTAssertEqual(engine.wordProgresses.count, 3)
+        XCTAssertEqual(engine.wordProgresses[0], 0.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[1], 0.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[2], 0.0, accuracy: 0.01)
+    }
+
+    func testWordProgressesMidLine() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: 1.5)
+        XCTAssertEqual(engine.wordProgresses.count, 3)
+        XCTAssertEqual(engine.wordProgresses[0], 1.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[1], 0.5, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[2], 0.0, accuracy: 0.01)
+    }
+
+    func testWordProgressesEndOfLine() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: 4.9)
+        XCTAssertEqual(engine.wordProgresses[0], 1.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[1], 1.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[2], 1.0, accuracy: 0.1)
+    }
+
+    func testWordProgressesEstimated() {
+        let engine = SyncEngine()
+        let lyrics = Lyrics(lines: [
+            LyricLine(time: 0.0, text: "AB CD"),
+            LyricLine(time: 4.0, text: "Next"),
+        ], source: .lrclib, isSynced: true)
+        engine.setLyrics(lyrics)
+        engine.update(position: 2.0)
+        XCTAssertEqual(engine.wordProgresses.count, 2)
+        XCTAssertEqual(engine.wordProgresses[0], 1.0, accuracy: 0.01)
+        XCTAssertEqual(engine.wordProgresses[1], 0.0, accuracy: 0.01)
+    }
+
+    func testWordProgressesResetOnLineChange() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: 3.0)
+        XCTAssertEqual(engine.wordProgresses.count, 3)
+        engine.update(position: 5.5)
+        XCTAssertEqual(engine.currentWords.count, 2)
+        XCTAssertEqual(engine.currentWords[0], "Second")
+    }
+
+    func testCurrentWordsFromWordTimings() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: 1.0)
+        XCTAssertEqual(engine.currentWords, ["Hello", "world", "tonight"])
+    }
+
+    func testWordProgressesBeforeFirstLine() {
+        let engine = SyncEngine()
+        engine.setLyrics(makeLyricsWithWords())
+        engine.update(position: -1.0)
+        XCTAssertTrue(engine.wordProgresses.isEmpty)
+        XCTAssertTrue(engine.currentWords.isEmpty)
+    }
+}

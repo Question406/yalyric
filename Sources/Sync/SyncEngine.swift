@@ -7,11 +7,14 @@ public class SyncEngine: ObservableObject {
     @Published public var currentLine: String = ""
     @Published public var nextLine: String = ""
     @Published public var progress: Double = 0  // 0-1 within current line
+    @Published public var wordProgresses: [Double] = []
+    @Published public var currentWords: [String] = []
 
     /// Manual offset in seconds. Positive = lyrics appear earlier, negative = later.
     public var offset: TimeInterval = 0
 
     private var lyrics: Lyrics?
+    private var estimatedTimingsCache: (index: Int, timings: [WordTiming])? = nil
 
     public init() {}
 
@@ -29,6 +32,9 @@ public class SyncEngine: ObservableObject {
         currentLine = ""
         nextLine = ""
         progress = 0
+        wordProgresses = []
+        currentWords = []
+        estimatedTimingsCache = nil
     }
 
     public func update(position: TimeInterval) {
@@ -39,6 +45,8 @@ public class SyncEngine: ObservableObject {
             currentLine = ""
             nextLine = ""
             progress = 0
+            wordProgresses = []
+            currentWords = []
             return
         }
 
@@ -49,6 +57,8 @@ public class SyncEngine: ObservableObject {
                 currentLine = lyrics.lines.first?.text ?? ""
                 nextLine = lyrics.lines.count > 1 ? lyrics.lines[1].text : ""
             }
+            wordProgresses = []
+            currentWords = []
             return
         }
 
@@ -58,6 +68,8 @@ public class SyncEngine: ObservableObject {
             currentLine = ""
             nextLine = lyrics.lines.first?.text ?? ""
             progress = 0
+            wordProgresses = []
+            currentWords = []
             return
         }
 
@@ -74,6 +86,44 @@ public class SyncEngine: ObservableObject {
         if lineDuration > 0 {
             progress = min(1.0, max(0.0, (adjustedPosition - lineStart) / lineDuration))
         }
+
+        // Calculate per-word progress
+        let timings = wordTimings(for: index, lineDuration: lineDuration)
+        if currentWords.count != timings.count {
+            currentWords = timings.map { $0.text }
+        }
+        var newProgresses = [Double](repeating: 0, count: timings.count)
+        let posInLine = adjustedPosition - lineStart
+        for (i, word) in timings.enumerated() {
+            let wordStart = word.offset
+            let wordEnd: Double
+            if i + 1 < timings.count {
+                wordEnd = timings[i + 1].offset
+            } else {
+                wordEnd = lineDuration
+            }
+            let wordDuration = wordEnd - wordStart
+            if wordDuration > 0 {
+                newProgresses[i] = min(1.0, max(0.0, (posInLine - wordStart) / wordDuration))
+            } else {
+                newProgresses[i] = posInLine >= wordStart ? 1.0 : 0.0
+            }
+        }
+        wordProgresses = newProgresses
+    }
+
+    private func wordTimings(for index: Int, lineDuration: Double) -> [WordTiming] {
+        guard let lyrics = lyrics, index >= 0, index < lyrics.lines.count else { return [] }
+        let line = lyrics.lines[index]
+        if let words = line.words, !words.isEmpty {
+            return words
+        }
+        if let cached = estimatedTimingsCache, cached.index == index {
+            return cached.timings
+        }
+        let estimated = Self.estimateWordTimings(text: line.text, lineDuration: lineDuration)
+        estimatedTimingsCache = (index: index, timings: estimated)
+        return estimated
     }
 
     /// Estimate word timings by distributing duration proportional to character count.
