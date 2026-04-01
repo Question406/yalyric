@@ -44,7 +44,11 @@ public struct MusixmatchProvider: LyricsProvider {
             if let richLines = try? await fetchRichsync(commontrackId: ctId, duration: track.duration, token: token) {
                 YalyricLog.info("[musixmatch] Got richsync with \(richLines.count) lines, word-level timing available")
                 lyrics = Lyrics(lines: richLines, source: .musixmatch, isSynced: true)
+            } else {
+                YalyricLog.info("[musixmatch] No richsync available (commontrack_id=\(ctId)), using line-level + estimated word timing")
             }
+        } else if lyrics.isSynced {
+            YalyricLog.info("[musixmatch] No commontrack_id found, using line-level + estimated word timing")
         }
 
         return lyrics
