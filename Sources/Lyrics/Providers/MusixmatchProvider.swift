@@ -36,7 +36,18 @@ public struct MusixmatchProvider: LyricsProvider {
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
-        return try parseResponse(data, track: track)
+        let (lyrics, commontrackId) = try parseResponse(data, track: track)
+        guard var lyrics = lyrics else { return nil }
+
+        // Try to fetch richsync (word-level timing) if we have a commontrack_id
+        if lyrics.isSynced, let ctId = commontrackId {
+            if let richLines = try? await fetchRichsync(commontrackId: ctId, duration: track.duration, token: token) {
+                YalyricLog.info("[musixmatch] Got richsync with \(richLines.count) lines, word-level timing available")
+                lyrics = Lyrics(lines: richLines, source: .musixmatch, isSynced: true)
+            }
+        }
+
+        return lyrics
     }
 
     private func getToken() async throws -> String? {
@@ -68,17 +79,21 @@ public struct MusixmatchProvider: LyricsProvider {
         return token
     }
 
-    private func parseResponse(_ data: Data, track: TrackInfo) throws -> Lyrics? {
+    /// Returns (lyrics, commontrack_id). The commontrack_id is used for the separate richsync call.
+    private func parseResponse(_ data: Data, track: TrackInfo) throws -> (Lyrics?, Int?) {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let message = json["message"] as? [String: Any],
               let body = message["body"] as? [String: Any],
-              let macroCalls = body["macro_calls"] as? [String: Any] else { return nil }
+              let macroCalls = body["macro_calls"] as? [String: Any] else { return (nil, nil) }
 
-        // Validate matched track name/artist from the response
+        // Extract commontrack_id and validate matched track
+        var commontrackId: Int?
         if let matcherGet = macroCalls["matcher.track.get"] as? [String: Any],
            let matchMsg = matcherGet["message"] as? [String: Any],
            let matchBody = matchMsg["body"] as? [String: Any],
            let matchTrack = matchBody["track"] as? [String: Any] {
+            commontrackId = matchTrack["commontrack_id"] as? Int
+
             let score = SearchMatchScore.score(
                 resultName: matchTrack["track_name"] as? String,
                 resultArtist: matchTrack["artist_name"] as? String,
@@ -87,11 +102,11 @@ public struct MusixmatchProvider: LyricsProvider {
             )
             if score < SearchMatchScore.minimumScore {
                 YalyricLog.info("[musixmatch] Rejected: matched '\(matchTrack["track_name"] ?? "")' by '\(matchTrack["artist_name"] ?? "")' (score \(score))")
-                return nil
+                return (nil, nil)
             }
         }
 
-        // Try richsync (word-level timing) first
+        // Check if richsync is already in the macro response
         if let richsyncGet = macroCalls["track.richsync.get"] as? [String: Any],
            let rsMessage = richsyncGet["message"] as? [String: Any],
            let rsBody = rsMessage["body"] as? [String: Any],
@@ -101,12 +116,12 @@ public struct MusixmatchProvider: LyricsProvider {
            let richsyncBody = richsync["richsync_body"] as? String {
             let lines = RichsyncParser.parse(richsyncBody)
             if !lines.isEmpty {
-                YalyricLog.info("[musixmatch] Got richsync with \(lines.count) lines, word-level timing available")
-                return Lyrics(lines: lines, source: .musixmatch, isSynced: true)
+                YalyricLog.info("[musixmatch] Got richsync from macro response with \(lines.count) lines")
+                return (Lyrics(lines: lines, source: .musixmatch, isSynced: true), commontrackId)
             }
         }
 
-        // Try synced subtitles first
+        // Try synced subtitles
         if let subtitleGet = macroCalls["track.subtitles.get"] as? [String: Any],
            let subMessage = subtitleGet["message"] as? [String: Any],
            let subBody = subMessage["body"] as? [String: Any],
@@ -116,7 +131,7 @@ public struct MusixmatchProvider: LyricsProvider {
            let subtitleBody = subtitle["subtitle_body"] as? String {
             let lines = LRCParser.parse(subtitleBody)
             if !lines.isEmpty {
-                return Lyrics(lines: lines, source: .musixmatch, isSynced: true)
+                return (Lyrics(lines: lines, source: .musixmatch, isSynced: true), commontrackId)
             }
         }
 
@@ -128,10 +143,41 @@ public struct MusixmatchProvider: LyricsProvider {
            let lyricsBody = lyrics["lyrics_body"] as? String,
            !lyricsBody.isEmpty {
             let lines = LRCParser.parsePlain(lyricsBody)
-            return Lyrics(lines: lines, source: .musixmatch, isSynced: false)
+            return (Lyrics(lines: lines, source: .musixmatch, isSynced: false), commontrackId)
         }
 
-        return nil
+        return (nil, nil)
+    }
+
+    /// Fetch richsync (word-level timing) using a separate API call.
+    private func fetchRichsync(commontrackId: Int, duration: TimeInterval, token: String) async throws -> [LyricLine]? {
+        var components = URLComponents(string: "https://apic-desktop.musixmatch.com/ws/1.1/track.richsync.get")!
+        components.queryItems = [
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "subtitle_format", value: "mxm"),
+            URLQueryItem(name: "commontrack_id", value: String(commontrackId)),
+            URLQueryItem(name: "q_duration", value: String(Int(duration))),
+            URLQueryItem(name: "usertoken", value: token),
+            URLQueryItem(name: "app_id", value: "web-desktop-app-v1.0"),
+        ]
+
+        guard let url = components.url else { return nil }
+        let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else { return nil }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let message = json["message"] as? [String: Any],
+              let msgBody = message["body"] as? [String: Any],
+              let richsync = msgBody["richsync"] as? [String: Any],
+              let richsyncBody = richsync["richsync_body"] as? String else {
+            return nil
+        }
+
+        let lines = RichsyncParser.parse(richsyncBody)
+        return lines.isEmpty ? nil : lines
     }
 }
 
