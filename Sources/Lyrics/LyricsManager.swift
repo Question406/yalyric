@@ -102,7 +102,7 @@ public class LyricsManager: ObservableObject {
 
     // MARK: - Scoring
 
-    private static let maxScore = 5
+    private static let maxScore = 7
 
     static func scoreLyrics(
         _ lyrics: Lyrics,
@@ -117,6 +117,8 @@ public class LyricsManager: ObservableObject {
             trackName: trackName, trackArtist: trackArtist
         ) { score += 1 }
         if lyrics.lines.count > 5 { score += 1 }
+        // Word-level timing is a significant upgrade over line-level
+        if lyrics.lines.contains(where: { $0.words != nil && !$0.words!.isEmpty }) { score += 2 }
         return score
     }
 
