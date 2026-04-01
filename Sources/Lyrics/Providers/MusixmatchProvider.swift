@@ -62,25 +62,53 @@ public struct MusixmatchProvider: LyricsProvider {
             return token
         }
 
-        guard let url = URL(string: "https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0") else { return nil }
+        // Try up to 3 times with exponential backoff (8s, 16s, 32s)
+        for attempt in 0..<3 {
+            guard let url = URL(string: "https://apic-desktop.musixmatch.com/ws/1.1/token.get?app_id=web-desktop-app-v1.0&t=\(Int(Date().timeIntervalSince1970 * 1000))") else { return nil }
 
-        let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+            let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else { return nil }
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else { return nil }
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let message = json["message"] as? [String: Any],
-              let body = message["body"] as? [String: Any],
-              let token = body["user_token"] as? String else { return nil }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let message = json["message"] as? [String: Any] else { return nil }
 
-        let expiry = Date().addingTimeInterval(3600)  // 1 hour — re-auth is captcha-blocked
-        Self.cachedToken = token
-        Self.tokenExpiry = expiry
-        AppConfig.set(AppConfig.Sources.musixmatchToken, token)
-        AppConfig.set(AppConfig.Sources.musixmatchTokenExpiry, expiry.timeIntervalSince1970)
-        return token
+            // Check for captcha block in JSON body (HTTP is 200 but body says 401)
+            let header = message["header"] as? [String: Any]
+            let statusCode = header?["status_code"] as? Int ?? 0
+            let hint = header?["hint"] as? String
+
+            if statusCode == 401 || hint == "captcha" {
+                YalyricLog.info("[musixmatch] Token captcha-blocked (attempt \(attempt + 1)/3)")
+                if attempt < 2 {
+                    let delay = pow(2.0, Double(attempt + 3))  // 8s, 16s
+                    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                }
+                continue
+            }
+
+            guard let body = message["body"] as? [String: Any],
+                  let token = body["user_token"] as? String,
+                  !token.isEmpty else { return nil }
+
+            YalyricLog.info("[musixmatch] Got fresh token")
+            let expiry = Date().addingTimeInterval(3600)
+            Self.cachedToken = token
+            Self.tokenExpiry = expiry
+            AppConfig.set(AppConfig.Sources.musixmatchToken, token)
+            AppConfig.set(AppConfig.Sources.musixmatchTokenExpiry, expiry.timeIntervalSince1970)
+            return token
+        }
+
+        YalyricLog.error("[musixmatch] Token fetch failed after 3 attempts (captcha-blocked)")
+        // Invalidate any cached poisoned token
+        Self.cachedToken = nil
+        Self.tokenExpiry = nil
+        AppConfig.set(AppConfig.Sources.musixmatchToken, "")
+        AppConfig.set(AppConfig.Sources.musixmatchTokenExpiry, 0.0)
+        return nil
     }
 
     /// Returns (lyrics, commontrack_id). The commontrack_id is used for the separate richsync call.
