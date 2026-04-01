@@ -89,8 +89,9 @@ public class SyncEngine: ObservableObject {
 
         // Calculate per-word progress
         let timings = wordTimings(for: index, lineDuration: lineDuration)
-        if currentWords.count != timings.count {
-            currentWords = timings.map { $0.text }
+        let newWords = timings.map { $0.text }
+        if currentWords != newWords {
+            currentWords = newWords
         }
         var newProgresses = [Double](repeating: 0, count: timings.count)
         let posInLine = adjustedPosition - lineStart
