@@ -170,13 +170,24 @@ public struct MusixmatchProvider: LyricsProvider {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else { return nil }
+              httpResponse.statusCode == 200 else {
+            YalyricLog.info("[musixmatch] richsync HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
+            return nil
+        }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let message = json["message"] as? [String: Any],
-              let msgBody = message["body"] as? [String: Any],
+              let message = json["message"] as? [String: Any] else {
+            YalyricLog.info("[musixmatch] richsync response: invalid JSON")
+            return nil
+        }
+
+        let statusCode = (message["header"] as? [String: Any])?["status_code"] as? Int
+        YalyricLog.info("[musixmatch] richsync API status_code=\(statusCode ?? -1)")
+
+        guard let msgBody = message["body"] as? [String: Any],
               let richsync = msgBody["richsync"] as? [String: Any],
               let richsyncBody = richsync["richsync_body"] as? String else {
+            YalyricLog.info("[musixmatch] richsync response: no richsync_body in body (keys: \((message["body"] as? [String: Any])?.keys.joined(separator: ", ") ?? "nil"))")
             return nil
         }
 
