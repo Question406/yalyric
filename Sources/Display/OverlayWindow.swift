@@ -8,10 +8,8 @@ class OverlayWindow: NSWindow {
     private let nextLyricLabel = NSTextField(labelWithString: "")
     private let sourceLabel = NSTextField(labelWithString: "")
     private var useA = true
-
-    private func currentText(of stack: WordStackView) -> String {
-        stack.wordLabels.map { $0.stringValue }.joined()
-    }
+    private var currentLineTextA = ""
+    private var currentLineTextB = ""
 
     private var currentTopA: NSLayoutConstraint!
     private var currentTopB: NSLayoutConstraint!
@@ -261,8 +259,8 @@ class OverlayWindow: NSWindow {
         }
 
         // Re-apply dynamic width with current text (handles font/size changes)
-        let activeStack = useA ? wordStackA : wordStackB
-        resizeToFit(currentText: currentText(of: activeStack), nextText: nextLyricLabel.stringValue, animated: false)
+        let activeLineText = useA ? currentLineTextA : currentLineTextB
+        resizeToFit(currentText: activeLineText, nextText: nextLyricLabel.stringValue, animated: false)
     }
 
     private func applyBackground(_ theme: Theme) {
@@ -503,7 +501,8 @@ class OverlayWindow: NSWindow {
         let theme = ThemeManager.shared.theme
         let activeStack = useA ? wordStackA : wordStackB
 
-        if currentText(of: activeStack) != current {
+        let activeLineText = useA ? currentLineTextA : currentLineTextB
+        if activeLineText != current {
             // If a previous animation is still running, snap to clean state first
             if isAnimating {
                 resetLabelsToCleanState()
@@ -513,6 +512,9 @@ class OverlayWindow: NSWindow {
             let activeTop = useA ? currentTopA! : currentTopB!
             let incomingTop = useA ? currentTopB! : currentTopA!
             let restY: CGFloat = 8
+
+            // Store the line text for future comparison
+            if useA { currentLineTextB = current } else { currentLineTextA = current }
 
             let wordTexts = words.isEmpty ? [current] : words
             incomingStack.setWords(
@@ -623,8 +625,8 @@ class OverlayWindow: NSWindow {
         }
 
         if nextLyricLabel.stringValue != next {
-            let activeStack = useA ? wordStackA : wordStackB
-            resizeToFit(currentText: currentText(of: activeStack), nextText: next, animated: true)
+            let activeLineText2 = useA ? currentLineTextA : currentLineTextB
+            resizeToFit(currentText: activeLineText2, nextText: next, animated: true)
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
