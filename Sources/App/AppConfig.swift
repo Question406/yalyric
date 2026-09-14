@@ -107,7 +107,9 @@ enum AppConfig {
     // MARK: - Sources
 
     enum Sources {
-        static let providerOrder = Key<[String]>("providerOrder", default: ["lrclib", "spotify", "musixmatch", "netease"])
+        /// Every provider id the app knows how to build. Order here is the default order.
+        static let knownProviders = ["lrclib", "netease", "kugou", "musixmatch", "spotify"]
+        static let providerOrder = Key<[String]>("providerOrder", default: knownProviders)
         static let spDCCookie = Key<String>("spDCCookie", default: "")
         static let durationTolerance = Key<Double>("durationTolerance", default: 30.0)
         static let musixmatchToken = Key<String>("musixmatch.token", default: "")
@@ -206,6 +208,15 @@ extension AppConfig {
         if let v = tomlOverrides[key.name] as? String { return v }
         return d.string(forKey: key.name) ?? key.defaultValue
     }
+    /// Reconciles a persisted provider order with the providers this build ships.
+    /// Keeps the user's ordering, appends providers they've never seen, drops unknown ids.
+    static func mergedProviderOrder(saved: [String], known: [String]) -> [String] {
+        var seen = Set<String>()
+        var result = saved.filter { known.contains($0) && seen.insert($0).inserted }
+        result.append(contentsOf: known.filter { seen.insert($0).inserted })
+        return result
+    }
+
     static func get(_ key: Key<[String]>) -> [String] {
         d.stringArray(forKey: key.name) ?? key.defaultValue
     }

@@ -55,7 +55,7 @@ class SettingsManager: ObservableObject {
         }
     }
 
-    static let defaultProviderOrder = ["lrclib", "spotify", "musixmatch", "netease"]
+    static let defaultProviderOrder = AppConfig.Sources.knownProviders
 
     private init() {
         if let saved = UserDefaults.standard.stringArray(forKey: "enabledDisplayModes") {
@@ -73,11 +73,10 @@ class SettingsManager: ObservableObject {
             lyricsLanguage = .auto
         }
 
-        if let saved = UserDefaults.standard.stringArray(forKey: "providerOrder"), !saved.isEmpty {
-            providerOrder = saved
-        } else {
-            providerOrder = Self.defaultProviderOrder
-        }
+        let savedOrder = UserDefaults.standard.stringArray(forKey: "providerOrder") ?? []
+        providerOrder = AppConfig.mergedProviderOrder(
+            saved: savedOrder, known: AppConfig.Sources.knownProviders
+        )
 
         autoHideOnPause = UserDefaults.standard.object(forKey: "autoHideOnPause") as? Bool ?? true
         let savedDelay = UserDefaults.standard.double(forKey: "autoHideDelay")
@@ -436,8 +435,9 @@ struct ProviderInfo {
     static let all: [String: ProviderInfo] = [
         "lrclib": ProviderInfo(id: "lrclib", name: "LRCLIB", detail: "Free, no auth"),
         "spotify": ProviderInfo(id: "spotify", name: "Spotify Internal", detail: "Requires SP_DC cookie"),
-        "musixmatch": ProviderInfo(id: "musixmatch", name: "Musixmatch", detail: "Auto-token"),
+        "musixmatch": ProviderInfo(id: "musixmatch", name: "Musixmatch", detail: "Token often refused"),
         "netease": ProviderInfo(id: "netease", name: "NetEase Cloud Music", detail: "Good for CJK"),
+        "kugou": ProviderInfo(id: "kugou", name: "Kugou", detail: "Good for CJK, no auth"),
     ]
 }
 
