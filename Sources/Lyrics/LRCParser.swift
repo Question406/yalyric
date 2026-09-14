@@ -15,6 +15,7 @@ public enum LyricsSource: String, Codable {
     case spotify
     case musixmatch
     case netease
+    case kugou
     case plain  // unsynced plain text
 }
 

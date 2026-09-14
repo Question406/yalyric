@@ -732,6 +732,7 @@ class OverlayWindow: NSWindow {
         case .spotify: provider = "Spotify"
         case .musixmatch: provider = "Musixmatch"
         case .netease: provider = "NetEase"
+        case .kugou: provider = "Kugou"
         case .plain: provider = ""
         case nil: provider = ""
         }

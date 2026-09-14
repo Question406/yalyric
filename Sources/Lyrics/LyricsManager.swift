@@ -11,11 +11,16 @@ public class LyricsManager: ObservableObject {
         "lrclib": LRCLIBProvider(),
         "spotify": SpotifyInternalProvider(),
         "musixmatch": MusixmatchProvider(),
-        "netease": NetEaseProvider()
+        "netease": NetEaseProvider(),
+        "kugou": KugouProvider()
     ]
 
     private var orderedProviders: [LyricsProvider] {
-        let order = AppConfig.get(AppConfig.Sources.providerOrder)
+        // Merge so providers added in a new build reach users with a saved order.
+        let order = AppConfig.mergedProviderOrder(
+            saved: AppConfig.get(AppConfig.Sources.providerOrder),
+            known: AppConfig.Sources.knownProviders
+        )
         return order.compactMap { allProviders[$0] }
     }
 

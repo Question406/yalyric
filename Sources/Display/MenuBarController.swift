@@ -185,6 +185,7 @@ class MenuBarController: NSObject, NSPopoverDelegate {
             case .spotify: providerName = "Spotify"
             case .musixmatch: providerName = "Musixmatch"
             case .netease: providerName = "NetEase"
+            case .kugou: providerName = "Kugou"
             case .plain: providerName = "plain"
             }
             let syncLabel = lyricsSynced ? "synced" : "plain text"
