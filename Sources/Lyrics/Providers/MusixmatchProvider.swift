@@ -80,6 +80,7 @@ public struct MusixmatchProvider: LyricsProvider {
            let matchBody = matchMsg["body"] as? [String: Any],
            let matchTrack = matchBody["track"] as? [String: Any] {
             let score = SearchMatchScore.score(
+                provider: source.rawValue,
                 resultName: matchTrack["track_name"] as? String,
                 resultArtist: matchTrack["artist_name"] as? String,
                 resultDurationMs: (matchTrack["track_length"] as? Double).map { $0 * 1000 },

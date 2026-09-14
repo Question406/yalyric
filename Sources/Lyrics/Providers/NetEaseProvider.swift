@@ -12,9 +12,21 @@ public struct NetEaseProvider: LyricsProvider {
     }
 
     private func searchSong(track: TrackInfo) async throws -> Int? {
+        // Raw title first, then normalized; finally the normalized title alone, which
+        // helps when Spotify's romanised artist ("Jess Lee") isn't how NetEase indexes it.
+        var queries = track.searchTitles.map { "\($0) \(track.artist)" }
+        if let normalized = track.searchTitles.last, !queries.contains(normalized) {
+            queries.append(normalized)
+        }
+        for query in queries {
+            if let id = try await searchSong(track: track, query: query) { return id }
+        }
+        return nil
+    }
+
+    private func searchSong(track: TrackInfo, query: String) async throws -> Int? {
         guard let url = URL(string: "https://music.163.com/api/search/get") else { return nil }
 
-        let query = "\(track.name) \(track.artist)"
         let bodyString = "s=\(query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? query)&type=1&limit=5&offset=0"
 
         var request = providerRequest(url: url, userAgent: "Mozilla/5.0")
@@ -23,7 +35,7 @@ public struct NetEaseProvider: LyricsProvider {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
@@ -42,6 +54,7 @@ public struct NetEaseProvider: LyricsProvider {
                 .joined(separator: " ")
 
             let score = SearchMatchScore.score(
+                provider: source.rawValue,
                 resultName: song["name"] as? String,
                 resultArtist: artistName,
                 resultDurationMs: duration,
@@ -65,7 +78,7 @@ public struct NetEaseProvider: LyricsProvider {
         var request = providerRequest(url: url, userAgent: "Mozilla/5.0")
         request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 

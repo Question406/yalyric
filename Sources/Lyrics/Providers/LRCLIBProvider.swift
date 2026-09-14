@@ -4,19 +4,28 @@ public struct LRCLIBProvider: LyricsProvider {
     public let source: LyricsSource = .lrclib
 
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
-        // Try without duration first — faster and avoids Spotify's inaccurate durations
-        if let lyrics = try await fetchExact(track: track, includeDuration: false) {
-            return lyrics
+        // Try without duration first — faster and avoids Spotify's inaccurate durations.
+        // Each title variant is tried in turn: the raw Spotify title, then the normalized
+        // one, since LRCLIB indexes bare titles and returns nothing for "X - 粵語版".
+        for title in track.searchTitles {
+            if let lyrics = try await fetchExact(track: track, title: title, includeDuration: false) {
+                return lyrics
+            }
         }
         // Fallback to search (broader matching)
-        return try await fetchSearch(track: track)
+        for title in track.searchTitles {
+            if let lyrics = try await fetchSearch(track: track, title: title) {
+                return lyrics
+            }
+        }
+        return nil
     }
 
-    private func fetchExact(track: TrackInfo, includeDuration: Bool) async throws -> Lyrics? {
+    private func fetchExact(track: TrackInfo, title: String, includeDuration: Bool) async throws -> Lyrics? {
         var components = URLComponents(string: "https://lrclib.net/api/get")!
         var queryItems = [
             URLQueryItem(name: "artist_name", value: track.artist),
-            URLQueryItem(name: "track_name", value: track.name),
+            URLQueryItem(name: "track_name", value: title),
             URLQueryItem(name: "album_name", value: track.album),
         ]
         if includeDuration {
@@ -27,23 +36,23 @@ public struct LRCLIBProvider: LyricsProvider {
         guard let url = components.url else { return nil }
         let request = providerRequest(url: url)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
         return try parseLRCLIBResponse(data)
     }
 
-    private func fetchSearch(track: TrackInfo) async throws -> Lyrics? {
+    private func fetchSearch(track: TrackInfo, title: String) async throws -> Lyrics? {
         var components = URLComponents(string: "https://lrclib.net/api/search")!
         components.queryItems = [
-            URLQueryItem(name: "q", value: "\(track.artist) \(track.name)")
+            URLQueryItem(name: "q", value: "\(track.artist) \(title)")
         ]
 
         guard let url = components.url else { return nil }
         let request = providerRequest(url: url)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
@@ -52,6 +61,7 @@ public struct LRCLIBProvider: LyricsProvider {
         // Score results using shared validation + synced lyrics bonus
         let scored = results.map { result -> (result: [String: Any], score: Int) in
             var score = SearchMatchScore.score(
+                provider: source.rawValue,
                 resultName: result["trackName"] as? String,
                 resultArtist: result["artistName"] as? String,
                 resultDurationMs: (result["duration"] as? Double).map { $0 * 1000 },

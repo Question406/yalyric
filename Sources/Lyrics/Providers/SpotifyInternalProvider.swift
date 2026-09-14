@@ -21,7 +21,7 @@ public struct SpotifyInternalProvider: LyricsProvider {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("WebPlayer", forHTTPHeaderField: "App-Platform")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
@@ -34,7 +34,7 @@ public struct SpotifyInternalProvider: LyricsProvider {
         var request = providerRequest(url: url)
         request.setValue("sp_dc=\(spDC)", forHTTPHeaderField: "Cookie")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
