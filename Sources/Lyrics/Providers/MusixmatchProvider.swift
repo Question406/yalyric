@@ -6,22 +6,40 @@ public struct MusixmatchProvider: LyricsProvider {
     // Persisted to UserDefaults — Musixmatch captcha-blocks token re-auth after first request
     private static var cachedToken: String? = {
         let t = AppConfig.get(AppConfig.Sources.musixmatchToken)
-        return t.isEmpty ? nil : t
+        return isUsableToken(t) ? t : nil
     }()
     private static var tokenExpiry: Date? = {
         let ts = AppConfig.get(AppConfig.Sources.musixmatchTokenExpiry)
         return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
     }()
 
+    /// Musixmatch signals refusal with HTTP 200, `status_code: 200`, and a `user_token`
+    /// of 56 zeros. Without this check the sentinel gets cached for an hour and every
+    /// subsequent lookup matches a fixed default track ('NOKIA' by 'Drake').
+    static func isUsableToken(_ token: String) -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed.contains { $0 != "0" }
+    }
+
     public func fetch(track: TrackInfo) async throws -> Lyrics? {
         guard let token = try await getToken() else { return nil }
+        for title in track.searchTitles {
+            if let lyrics = try await fetch(track: track, title: title, token: token) {
+                return lyrics
+            }
+        }
+        return nil
+    }
+
+    private func fetch(track: TrackInfo, title: String, token: String) async throws -> Lyrics? {
 
         var components = URLComponents(string: "https://apic-desktop.musixmatch.com/ws/1.1/macro.subtitles.get")!
         components.queryItems = [
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "namespace", value: "lyrics_richsynced"),
             URLQueryItem(name: "subtitle_format", value: "lrc"),
-            URLQueryItem(name: "q_track", value: track.name),
+            URLQueryItem(name: "q_track", value: title),
             URLQueryItem(name: "q_artist", value: track.artist),
             URLQueryItem(name: "q_album", value: track.album),
             URLQueryItem(name: "q_duration", value: String(Int(track.duration))),
@@ -32,7 +50,7 @@ public struct MusixmatchProvider: LyricsProvider {
         guard let url = components.url else { return nil }
         let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
@@ -51,7 +69,7 @@ public struct MusixmatchProvider: LyricsProvider {
 
         let request = providerRequest(url: url, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await providerSession.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
@@ -59,6 +77,11 @@ public struct MusixmatchProvider: LyricsProvider {
               let message = json["message"] as? [String: Any],
               let body = message["body"] as? [String: Any],
               let token = body["user_token"] as? String else { return nil }
+
+        guard Self.isUsableToken(token) else {
+            YalyricLog.info("[yalyric]   [musixmatch] token denied (captcha/rate limit) — provider unavailable")
+            return nil
+        }
 
         let expiry = Date().addingTimeInterval(3600)  // 1 hour — re-auth is captcha-blocked
         Self.cachedToken = token
