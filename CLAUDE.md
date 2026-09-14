@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 swift build && .build/debug/yalyric     # Build and run
 swift build -c release                   # Release build
 ./scripts/bundle.sh 0.2.0               # Create .app bundle → dist/yalyric.app
-swift test                               # Run all 63 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
+swift test                               # Run all 122 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
 ```
 
 The app appears as a music note icon in the menu bar. Needs Spotify desktop app running.
@@ -48,7 +48,7 @@ OverlayWindow / DesktopWidget / MenuBarController
 
 - **SpotifyBridge**: Filters non-music content (`spotify:track:` prefix). Duration in ms. **AppleMusicBridge**: Uses `database ID`. Duration in seconds.
 
-- **LyricsManager**: Queries all 4 providers concurrently via `withTaskGroup`. Scoring: synced(+3), langMatch(+1), lines>5(+1). Early return on perfect score. Two-tier cache: LRU memory (50) + disk JSON (200).
+- **LyricsManager**: Queries all 5 providers concurrently via `withTaskGroup`. Scoring: synced(+3), langMatch(+1), lines>5(+1). Early return on perfect score. Two-tier cache: LRU memory (50) + disk JSON (200).
 
 - **SearchMatchScore** (in `LyricsProvider.swift`): Shared validation for search-based providers. Scores name(+3), artist(+3), duration(+2). Minimum score 3 required. All providers must use this for result validation.
 
@@ -64,7 +64,17 @@ OverlayWindow / DesktopWidget / MenuBarController
 - **`NSWindow.alphaValue` needs `animator()`**: `allowsImplicitAnimation` does NOT animate window-level `alphaValue`. Must use `window.animator().alphaValue`.
 - **Desktop-level windows can't receive drags**: Temporarily raise to `.floating` level during edit mode.
 - **Theme changes cascade**: Setting `ThemeManager.shared.theme` triggers Combine → applyTheme on all displays → can rebuild backgrounds. Avoid in hot paths. Use `isLocking` flags when saving position.
-- **Musixmatch captcha**: Token gets rate-limited. Persisted to UserDefaults with 1hr expiry. Browser-like User-Agent helps.
+- **Musixmatch is refused, not broken**: `token.get` answers HTTP 200 / `status_code: 200` with a `user_token` of 56 zeros — a denial sentinel. `isUsableToken` rejects it so the provider fails fast instead of caching it and matching 'NOKIA' by 'Drake' on every track. A real token needs an un-gated IP; the public alternative is the licensed `api.musixmatch.com` (synced lyrics are a paid tier).
+
+- **Spotify internal provider is dead**: `open.spotify.com/get_access_token` returns 403 URL Blocked; `/api/token` returns 400 "not permitted under the Spotify Developer Terms". There is no official lyrics endpoint. Left in place but it can never succeed.
+
+- **Provider sessions must not carry cookies**: `providerSession` disables cookies deliberately. NetEase throttles callers that return its `NMTID` cookie by ignoring the POST body and answering HTTP 200 with ten arbitrary popular songs — indistinguishable from a real miss.
+
+- **Kugou throttles per keyword**: repeated searches for the same keyword start returning `total: 0`. Queries are capped at two per track for this reason. Kugou is a supplementary CJK source, not a primary one.
+
+- **Provider units differ**: Spotify duration is ms, Apple Music and Kugou are seconds, LRCLIB is seconds, NetEase is ms. `SearchMatchScore` expects **milliseconds**.
+
+- **Traditional vs Simplified Han**: Spotify reports 執迷不悔, NetEase/Kugou report 执迷不悔. `TitleNormalizer.matchKey` applies the `Hant-Hans` transform — without it identical tracks score zero on name.
 
 ## Logging
 
@@ -72,9 +82,12 @@ Use `YalyricLog.info()` / `.error()` instead of `print()`. Writes to `~/Library/
 
 ## Testing
 
-Tests are in `Tests/` — 5 files, 63 tests. Key areas:
+Tests are in `Tests/` — 11 files, 122 tests. Key areas:
 - `SyncEngineTests`: timestamp matching, offset, progress calculation
 - `LyricsModelTests`: binary search, lyrics scoring
 - `ThemeTests`: equality, gradient location math
 - `LRCParserTests`: LRC format parsing (time tags, plain text, edge cases)
 - `TrackInfoTests`: Spotify ID extraction
+- `LyricsMatchingTests`: title normalization + search-result scoring (regression cases drawn from real log failures)
+- `KugouProviderTests`: LRC payload decoding, candidate selection (seconds→ms unit conversion)
+- `ProviderRegistryTests`: merging a persisted providerOrder with newly shipped providers
