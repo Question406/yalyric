@@ -7,11 +7,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 swift build && .build/debug/yalyric     # Build and run
 swift build -c release                   # Release build
-./scripts/bundle.sh 0.2.0               # Create .app bundle → dist/yalyric.app
+./scripts/bundle.sh 0.3.0               # Local .app bundle → dist/ (NOT for publishing — see Releasing)
 swift test                               # Run all 122 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
 ```
 
 The app appears as a music note icon in the menu bar. Needs Spotify desktop app running.
+
+## Releasing
+
+**Tag and push. That is the entire release.** Do not build, upload, or edit the cask
+by hand — three workflows in `.github/workflows/` already do it:
+
+```bash
+git tag -a v0.3.0 -m "v0.3.0" && git push origin v0.3.0
+```
+
+- **`ci.yml`** — build + test on every push to `main` and every PR.
+- **`release.yml`** — on a `v*` tag: runs `scripts/bundle.sh` on `macos-14` and
+  uploads `dist/yalyric-*.zip` via `softprops/action-gh-release`.
+- **`homebrew.yml`** — on Release success: downloads that zip, recomputes its
+  sha256, regenerates `Casks/yalyric.rb` and pushes to `Question406/homebrew-tap`.
+
+Check both ran with `gh run list`. Then `brew update && brew upgrade --cask yalyric`.
+
+The version string lives only in the tag, `bundle.sh`'s argument, and the cask.
+There is no version constant in `Sources/` to bump.
+
+### Release Gotchas
+
+- **`scripts/bundle.sh` is for local testing, not publishing.** Running it to cut a
+  release races `release.yml`, which rebuilds on `macos-14` and overwrites the
+  asset. The two zips are never byte-identical — the ad-hoc signature differs per
+  build — so a hand-uploaded artifact gets silently replaced by CI's, and anything
+  you derived from its sha256 is then stale.
+
+- **The cask is generated, not edited.** It comes from the heredoc in
+  `homebrew.yml`. Editing `Casks/yalyric.rb` in the tap directly works until the
+  next release regenerates it; change the heredoc instead.
+
+- **Custom release notes must be written after the run finishes.**
+  `generate_release_notes: true` is set, but the action does not overwrite a body
+  that already exists. Use `gh release edit vX.Y.Z --notes-file notes.md`.
+
+- **The cask's Homebrew deprecations are deliberate.** Homebrew 7.0.1 warns that
+  `postflight` and `depends_on macos: ">= :ventura"` are deprecated, but
+  `postflight_steps` cannot see `appdir` — `InstallStepsContext` in
+  `cask_artifact.rb` exposes only `staged_path`, `caskroom_path`, `home` and
+  `config`. Naively "fixing" the warning breaks the install with
+  `undefined local variable or method 'appdir'`, which leaves the app quarantined.
+
+- **Builds are ad-hoc signed, never notarized.** Homebrew warns "yalyric's signer
+  changed" on every upgrade, and macOS may re-prompt for Apple Events access to
+  Spotify. Installing outside Homebrew needs `xattr -cr`.
 
 ## Architecture
 
