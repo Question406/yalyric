@@ -388,19 +388,17 @@ struct AppearanceTab: View {
             }
 
             Section("Position") {
-                Picker("Overlay position", selection: $themeManager.theme.overlayPosition) {
+                // Route through ThemeManager so the saved custom position is cleared
+                // before the theme publishes; otherwise the overlay ignores the preset.
+                Picker("Overlay position", selection: Binding(
+                    get: { themeManager.theme.overlayPosition },
+                    set: { themeManager.selectOverlayPosition($0) }
+                )) {
                     ForEach(OverlayPosition.allCases.filter { $0 != .custom }, id: \.rawValue) { pos in
                         Text(pos.rawValue).tag(pos)
                     }
                     if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
                         Text("Custom").tag(OverlayPosition.custom)
-                    }
-                }
-                .onChange(of: themeManager.theme.overlayPosition) { newValue in
-                    if newValue != .custom {
-                        AppConfig.set(AppConfig.Overlay.hasCustomPosition, false)
-                        AppConfig.set(AppConfig.Overlay.customCenterX, 0)
-                        AppConfig.set(AppConfig.Overlay.customY, 0)
                     }
                 }
                 LabeledSlider(

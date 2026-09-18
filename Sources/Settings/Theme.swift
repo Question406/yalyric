@@ -27,7 +27,10 @@ enum OverlayPosition: String, CaseIterable {
     case custom = "Custom"
 
     func defaultOrigin(for screen: NSScreen, overlaySize: NSSize) -> NSPoint {
-        let frame = screen.visibleFrame
+        defaultOrigin(visibleFrame: screen.visibleFrame, overlaySize: overlaySize)
+    }
+
+    func defaultOrigin(visibleFrame frame: NSRect, overlaySize: NSSize) -> NSPoint {
         switch self {
         case .bottomCenter:
             return NSPoint(x: frame.midX - overlaySize.width / 2, y: frame.minY + 80)
@@ -328,5 +331,17 @@ class ThemeManager: ObservableObject {
             newTheme.fillEdgeWidth = theme.fillEdgeWidth
             theme = newTheme
         }
+    }
+
+    /// Selecting a preset must discard any dragged position *before* the theme
+    /// publishes: `OverlayWindow` repositions on that publish and would otherwise
+    /// still see the custom flag and ignore the preset.
+    func selectOverlayPosition(_ position: OverlayPosition) {
+        if position != .custom {
+            AppConfig.set(AppConfig.Overlay.hasCustomPosition, false)
+            AppConfig.set(AppConfig.Overlay.customCenterX, 0)
+            AppConfig.set(AppConfig.Overlay.customY, 0)
+        }
+        theme.overlayPosition = position
     }
 }

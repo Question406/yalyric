@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 swift build && .build/debug/yalyric     # Build and run
 swift build -c release                   # Release build
 ./scripts/bundle.sh 0.3.0               # Local .app bundle → dist/ (NOT for publishing — see Releasing)
-swift test                               # Run all 122 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
+swift test                               # Run all 140 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
 ```
 
 The app appears as a music note icon in the menu bar. Needs Spotify desktop app running.
@@ -110,6 +110,9 @@ OverlayWindow / DesktopWidget / MenuBarController
 - **`attributedStringValue` overrides label alignment**: Always include `NSParagraphStyle` with `.center` when setting `attributedStringValue` on labels.
 - **`NSWindow.alphaValue` needs `animator()`**: `allowsImplicitAnimation` does NOT animate window-level `alphaValue`. Must use `window.animator().alphaValue`.
 - **Desktop-level windows can't receive drags**: Temporarily raise to `.floating` level during edit mode.
+- **Overlay labels must have compression resistance below 500**: NSWindow imposes its frame at `windowSizeStayPut` priority (500). A label's default 750 outranks it, so the previous line left in the faded-out A/B label held the window at the old width while the origin moved — the overlay grew to the right and sat off centre, and long lines pushed the window past `overlayWidth`. `configureLabel` sets `.defaultLow`; keep it that way.
+- **Never animate the overlay frame with `animator().setFrame`**: overlapping NSWindow frame animations don't compose (one target's origin with another's width). `OverlayWindow` uses `FrameAnimator`, which restarts from the current frame on every retarget and is cancelled before any direct `setFrame`.
+- **Overlay layout math lives in `OverlayLayout`**: width, vertical centring, karaoke mask rect and frame resolution are pure functions with tests. `init`, `applyPosition` and `moveToScreen` all go through `resolvedFrame`; don't add a fourth copy.
 - **Theme changes cascade**: Setting `ThemeManager.shared.theme` triggers Combine → applyTheme on all displays → can rebuild backgrounds. Avoid in hot paths. Use `isLocking` flags when saving position.
 - **Musixmatch is refused, not broken**: `token.get` answers HTTP 200 / `status_code: 200` with a `user_token` of 56 zeros — a denial sentinel. `isUsableToken` rejects it so the provider fails fast instead of caching it and matching 'NOKIA' by 'Drake' on every track. A real token needs an un-gated IP; the public alternative is the licensed `api.musixmatch.com` (synced lyrics are a paid tier).
 
@@ -129,7 +132,7 @@ Use `YalyricLog.info()` / `.error()` instead of `print()`. Writes to `~/Library/
 
 ## Testing
 
-Tests are in `Tests/` — 11 files, 122 tests. Key areas:
+Tests are in `Tests/` — 15 files, 140 tests. Key areas:
 - `SyncEngineTests`: timestamp matching, offset, progress calculation
 - `LyricsModelTests`: binary search, lyrics scoring
 - `ThemeTests`: equality, gradient location math
@@ -138,3 +141,5 @@ Tests are in `Tests/` — 11 files, 122 tests. Key areas:
 - `LyricsMatchingTests`: title normalization + search-result scoring (regression cases drawn from real log failures)
 - `KugouProviderTests`: LRC payload decoding, candidate selection (seconds→ms unit conversion)
 - `ProviderRegistryTests`: merging a persisted providerOrder with newly shipped providers
+- `OverlayLayoutTests` / `OverlayWindowTests` / `FrameAnimatorTests`: overlay width, truncation, vertical centring, frame resolution, and the window staying centred when a shorter line follows a longer one
+- `OverlayPositionSelectionTests`: choosing a preset clears the dragged position before the theme publishes

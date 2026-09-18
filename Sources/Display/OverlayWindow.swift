@@ -11,20 +11,22 @@ class OverlayWindow: NSWindow {
 
     private var currentTopA: NSLayoutConstraint!
     private var currentTopB: NSLayoutConstraint!
+    private var nextTop: NSLayoutConstraint!
+    /// Vertical metrics for the current fonts; the text block is centred in `layout.height`.
+    private var layout: OverlayLayout.Vertical
 
     private var container: NSView!
     private var backgroundView: NSVisualEffectView?
     private var backgroundLayer: CALayer?
 
     private let slideDistance: CGFloat = 12
-    private let horizontalPadding: CGFloat = 16
-    private let minOverlayWidth: CGFloat = 200
     private var cancellables = Set<AnyCancellable>()
     private var isAnimating = false
     private var isMouseInside = false
     private var mouseTrackingTimer: Timer?
     private var anchoredCenterX: CGFloat = 0  // stable center for resizeToFit
     private var lastTargetWidth: CGFloat = 0  // prevents redundant animations
+    private var frameAnimator: FrameAnimator!
     private(set) var isEditMode = false
     private var lastPositionKey: String = ""  // tracks position-related theme state
     private var editBorderLayer: CAShapeLayer?
@@ -38,29 +40,13 @@ class OverlayWindow: NSWindow {
     init() {
         let theme = ThemeManager.shared.theme
         let screen = NSScreen.main ?? NSScreen.screens[0]
-        let size = NSSize(width: theme.overlayWidth, height: 90)
-
-        // Use saved custom position if available, otherwise use preset
-        let origin: NSPoint
-        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
-            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
-            // If values are > 1.0, they're legacy absolute coords — convert
-            if rx > 1.0 || ry > 1.0 {
-                origin = NSPoint(x: rx - size.width / 2, y: ry)
-                anchoredCenterX = rx
-            } else {
-                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
-                origin = NSPoint(x: abs.centerX - size.width / 2, y: abs.originY)
-                anchoredCenterX = abs.centerX
-            }
-        } else {
-            origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: size)
-            anchoredCenterX = origin.x + size.width / 2
-        }
+        let layout = Self.verticalLayout(for: theme)
+        let frame = Self.resolvedFrame(theme: theme, on: screen, height: layout.height)
+        self.layout = layout
+        anchoredCenterX = frame.midX
 
         super.init(
-            contentRect: NSRect(origin: origin, size: size),
+            contentRect: frame,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
@@ -74,12 +60,59 @@ class OverlayWindow: NSWindow {
         self.hasShadow = false
         self.isMovableByWindowBackground = false
 
+        frameAnimator = FrameAnimator { [weak self] rect in
+            self?.setFrame(rect, display: true)
+        }
+        frameAnimator.onComplete = { [weak self] in
+            // Label bounds only settle now; realign the karaoke masks to the text
+            self?.syncKaraokeMasks()
+        }
+
         setupContent()
         applyTheme(theme)
         observeTheme()
         setupMouseTracking()
         currentScreen = screen
         currentScreenID = ScreenDetector.displayID(of: screen)
+    }
+
+    // MARK: - Frame Resolution
+
+    /// The screen this overlay is tracking, looked up by display ID so it survives
+    /// `NSScreen` instances being recreated on display changes.
+    private var trackedScreen: NSScreen {
+        NSScreen.screens.first { ScreenDetector.displayID(of: $0) == currentScreenID }
+            ?? NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    /// Reads the user's dragged position. Legacy absolute coordinates are migrated
+    /// to relative ones once, so every code path interprets them the same way.
+    private static func loadCustomPosition(migratingAgainst visibleFrame: NSRect) -> OverlayLayout.CustomPosition? {
+        guard AppConfig.get(AppConfig.Overlay.hasCustomPosition) else { return nil }
+        let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
+        let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
+        let pos = OverlayLayout.customPosition(rawX: rx, rawY: ry, visibleFrame: visibleFrame)
+        if pos.relativeX != rx || pos.relativeY != ry {
+            AppConfig.set(AppConfig.Overlay.customCenterX, Double(pos.relativeX))
+            AppConfig.set(AppConfig.Overlay.customY, Double(pos.relativeY))
+        }
+        return pos
+    }
+
+    /// Single source of truth for the window frame on a given screen. Used by
+    /// `init`, `applyPosition` and `moveToScreen` so they can never disagree.
+    private static func resolvedFrame(theme: Theme, on screen: NSScreen, height: CGFloat) -> NSRect {
+        let migrationFrame = (NSScreen.main ?? screen).visibleFrame
+        let custom = loadCustomPosition(migratingAgainst: migrationFrame)
+        return OverlayLayout.frame(theme: theme, custom: custom,
+                                   screenFrame: screen.frame, visibleFrame: screen.visibleFrame,
+                                   height: height)
+    }
+
+    private static func verticalLayout(for theme: Theme) -> OverlayLayout.Vertical {
+        let current = OverlayLayout.requiredLabelSize(for: "Ag", font: theme.currentLineFont, letterSpacing: 0).height
+        let next = OverlayLayout.requiredLabelSize(for: "Ag", font: theme.nextLineFont, letterSpacing: 0).height
+        return OverlayLayout.vertical(currentLineHeight: current, nextLineHeight: next)
     }
 
     private func setupMouseTracking() {
@@ -146,6 +179,8 @@ class OverlayWindow: NSWindow {
 
         // Save as relative coordinates for cross-screen compatibility
         if let screen = self.screen ?? currentScreen {
+            currentScreen = screen
+            currentScreenID = ScreenDetector.displayID(of: screen)
             let rel = ScreenDetector.absoluteToRelative(centerX: frame.midX, originY: frame.origin.y, on: screen)
             AppConfig.set(AppConfig.Overlay.customCenterX, rel.relativeX)
             AppConfig.set(AppConfig.Overlay.customY, rel.relativeY)
@@ -182,6 +217,12 @@ class OverlayWindow: NSWindow {
         label.isSelectable = false
         label.wantsLayer = true
         label.translatesAutoresizingMaskIntoConstraints = false
+        // The window frame must win over the text. NSWindow imposes its size at
+        // priority 500 (windowSizeStayPut); a label's default compression
+        // resistance of 750 outranks that, so a long line in the faded-out
+        // label kept the window wide after every shrink and pushed it off centre.
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
     }
 
     private func setupContent() {
@@ -206,8 +247,9 @@ class OverlayWindow: NSWindow {
         container.addSubview(nextLyricLabel)
         container.addSubview(sourceLabel)
 
-        currentTopA = currentLabelA.topAnchor.constraint(equalTo: container.topAnchor, constant: 8)
-        currentTopB = currentLabelB.topAnchor.constraint(equalTo: container.topAnchor, constant: 8 + slideDistance)
+        currentTopA = currentLabelA.topAnchor.constraint(equalTo: container.topAnchor, constant: layout.currentTop)
+        currentTopB = currentLabelB.topAnchor.constraint(equalTo: container.topAnchor, constant: layout.currentTop + slideDistance)
+        nextTop = nextLyricLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: layout.nextTop)
 
         NSLayoutConstraint.activate([
             currentLabelA.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
@@ -220,7 +262,7 @@ class OverlayWindow: NSWindow {
 
             nextLyricLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             nextLyricLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
-            nextLyricLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 44),
+            nextTop,
 
             sourceLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
             sourceLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
@@ -234,31 +276,33 @@ class OverlayWindow: NSWindow {
     func applyTheme(_ theme: Theme) {
         let shadow = theme.textShadow
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-
         for label in [currentLabelA, currentLabelB] {
             label.font = theme.currentLineFont
             label.textColor = theme.textColor
             label.shadow = shadow
             label.layer?.setAffineTransform(.identity)
-            let str = NSMutableAttributedString(string: label.stringValue)
-            let range = NSRange(location: 0, length: str.length)
-            str.addAttribute(.paragraphStyle, value: paragraphStyle, range: range)
-            if theme.letterSpacing != 0 {
-                str.addAttribute(.kern, value: theme.letterSpacing, range: range)
-            }
-            label.attributedStringValue = str
+            label.attributedStringValue = OverlayLayout.attributedText(
+                label.stringValue, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
         }
 
         nextLyricLabel.font = theme.nextLineFont
         nextLyricLabel.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
         nextLyricLabel.shadow = shadow
+        nextLyricLabel.attributedStringValue = OverlayLayout.attributedText(
+            nextLyricLabel.stringValue, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
+
+        // Font changes move the text block; keep it centred in the window
+        layout = Self.verticalLayout(for: theme)
+        nextTop.constant = layout.nextTop
+        if !isAnimating {
+            currentTopA.constant = layout.currentTop
+            currentTopB.constant = layout.currentTop
+        }
 
         applyBackground(theme)
 
         // Only reposition when position-related properties change
-        let posKey = "\(theme.overlayPosition.rawValue)|\(theme.overlayWidth)|\(theme.backgroundStyle.rawValue)"
+        let posKey = "\(theme.overlayPosition.rawValue)|\(theme.overlayWidth)|\(theme.backgroundStyle.rawValue)|\(layout.height)"
         if posKey != lastPositionKey {
             lastPositionKey = posKey
             lastTargetWidth = 0  // force re-apply on next resize
@@ -337,41 +381,14 @@ class OverlayWindow: NSWindow {
 
     private func applyPosition(_ theme: Theme) {
         if isEditMode { return }
-
-        let screen = NSScreen.main ?? NSScreen.screens[0]
-        let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
-        let newSize = NSSize(width: width, height: 90)
-
-        // Check for user-saved custom position (stored independently from theme)
-        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
-            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
-            let targetScreen = currentScreen ?? screen
-            let centerX: CGFloat
-            let y: CGFloat
-            if rx > 1.0 || ry > 1.0 {
-                centerX = rx
-                y = ry
-            } else {
-                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: targetScreen)
-                centerX = abs.centerX
-                y = abs.originY
-            }
-            let x = centerX - newSize.width / 2
-            anchoredCenterX = centerX
-            setFrame(NSRect(origin: NSPoint(x: x, y: y), size: newSize), display: true)
-            return
-        }
-
-        let origin: NSPoint
-        if theme.backgroundStyle == .bar {
-            let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
-            origin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
-        } else {
-            origin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
-        }
-        anchoredCenterX = origin.x + newSize.width / 2
-        setFrame(NSRect(origin: origin, size: newSize), display: true)
+        // Position on the screen we are tracking, not NSScreen.main: after a theme
+        // change on a secondary display the window used to jump to the main screen
+        // and moveToScreen's display-ID guard then refused to bring it back.
+        let frame = Self.resolvedFrame(theme: theme, on: trackedScreen, height: layout.height)
+        frameAnimator.cancel()
+        anchoredCenterX = frame.midX
+        lastTargetWidth = 0
+        setFrame(frame, display: true)
     }
 
     // MARK: - Multi-Display
@@ -383,31 +400,20 @@ class OverlayWindow: NSWindow {
         currentScreenID = targetID
 
         let theme = ThemeManager.shared.theme
-        let width = theme.backgroundStyle == .bar ? screen.frame.width : theme.overlayWidth
-        let newSize = NSSize(width: width, height: 90)
+        let newFrame = Self.resolvedFrame(theme: theme, on: screen, height: layout.height)
 
-        let newOrigin: NSPoint
-        if AppConfig.get(AppConfig.Overlay.hasCustomPosition) {
-            let rx = CGFloat(AppConfig.get(AppConfig.Overlay.customCenterX))
-            let ry = CGFloat(AppConfig.get(AppConfig.Overlay.customY))
-            if rx > 1.0 || ry > 1.0 {
-                // Legacy absolute — just use preset on new screen
-                newOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
-            } else {
-                let abs = ScreenDetector.relativeToAbsolute(relativeX: rx, relativeY: ry, on: screen)
-                newOrigin = NSPoint(x: abs.centerX - newSize.width / 2, y: abs.originY)
-            }
-        } else {
-            if theme.backgroundStyle == .bar {
-                let baseOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
-                newOrigin = NSPoint(x: screen.frame.minX, y: baseOrigin.y)
-            } else {
-                newOrigin = theme.overlayPosition.defaultOrigin(for: screen, overlaySize: newSize)
-            }
+        // The anchor moves only when the window does. Updating it before the
+        // fade-out let a lyric resize animate the window across displays.
+        let place = { [weak self] in
+            guard let self else { return }
+            self.frameAnimator.cancel()
+            self.anchoredCenterX = newFrame.midX
+            self.setFrame(newFrame, display: true)
+            // Shrink back to the text immediately instead of waiting for the next line
+            self.lastTargetWidth = 0
+            let activeLabel = self.useA ? self.currentLabelA : self.currentLabelB
+            self.resizeToFit(currentText: activeLabel.stringValue, nextText: self.nextLyricLabel.stringValue, animated: false)
         }
-
-        let newFrame = NSRect(origin: newOrigin, size: newSize)
-        anchoredCenterX = newOrigin.x + newSize.width / 2
 
         if animated && alphaValue > 0 {
             // Crossfade: fade out → reposition → fade in
@@ -416,7 +422,7 @@ class OverlayWindow: NSWindow {
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 self.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                self?.setFrame(newFrame, display: true)
+                place()
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = 0.15
                     ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -424,21 +430,11 @@ class OverlayWindow: NSWindow {
                 }
             }
         } else {
-            setFrame(newFrame, display: true)
+            place()
         }
     }
 
     // MARK: - Dynamic Width
-
-    private func measureTextWidth(_ text: String, font: NSFont, letterSpacing: CGFloat) -> CGFloat {
-        guard !text.isEmpty else { return 0 }
-        var attrs: [NSAttributedString.Key: Any] = [.font: font]
-        if letterSpacing != 0 {
-            attrs[.kern] = letterSpacing
-        }
-        let size = (text as NSString).size(withAttributes: attrs)
-        return ceil(size.width)
-    }
 
     private func resizeToFit(currentText: String, nextText: String, animated: Bool) {
         let theme = ThemeManager.shared.theme
@@ -446,30 +442,26 @@ class OverlayWindow: NSWindow {
         // Bar mode stays full-width
         if theme.backgroundStyle == .bar { return }
 
-        let currentWidth = measureTextWidth(currentText, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
-        let nextWidth = measureTextWidth(nextText, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
-        let textWidth = max(currentWidth, nextWidth)
-        let targetWidth = min(
-            theme.overlayWidth,
-            max(minOverlayWidth, textWidth + horizontalPadding * 2)
-        )
+        // Measure what the label needs, not the bare glyph run: NSTextFieldCell
+        // pads the text, and a label sized to the glyph width truncates with "…".
+        let currentWidth = OverlayLayout.requiredLabelWidth(for: currentText, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
+        let nextWidth = OverlayLayout.requiredLabelWidth(for: nextText, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
+        let targetWidth = OverlayLayout.windowWidth(currentTextWidth: currentWidth, nextTextWidth: nextWidth, maxWidth: theme.overlayWidth)
 
         // Skip if target hasn't changed — prevents redundant animations
         guard abs(lastTargetWidth - targetWidth) > 2 else { return }
         lastTargetWidth = targetWidth
 
-        let currentY = frame.origin.y
-        let newOrigin = NSPoint(x: anchoredCenterX - targetWidth / 2, y: currentY)
-        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: frame.height))
+        let newOrigin = NSPoint(x: anchoredCenterX - targetWidth / 2, y: frame.origin.y)
+        let newFrame = NSRect(origin: newOrigin, size: NSSize(width: targetWidth, height: layout.height))
 
         if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = theme.animationDuration
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                self.animator().setFrame(newFrame, display: true)
-            }
+            frameAnimator.animate(from: frame, to: newFrame, duration: theme.animationDuration)
         } else {
+            frameAnimator.cancel()
             setFrame(newFrame, display: true)
+            contentView?.layoutSubtreeIfNeeded()
+            syncKaraokeMasks()
         }
     }
 
@@ -479,7 +471,6 @@ class OverlayWindow: NSWindow {
         let gradient = CAGradientLayer()
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1, y: 0.5)
-        gradient.frame = label.bounds
         // Start fully dim (unfilled)
         gradient.colors = [NSColor.white.cgColor, NSColor.white.cgColor,
                            NSColor.white.withAlphaComponent(0.35).cgColor,
@@ -504,9 +495,7 @@ class OverlayWindow: NSWindow {
                 currentLabelB.layer?.mask = mask
                 gradientMaskB = mask
             }
-            // Always sync mask frames to current label bounds
-            gradientMaskA?.frame = currentLabelA.bounds
-            gradientMaskB?.frame = currentLabelB.bounds
+            syncKaraokeMasks()
         } else {
             // Remove masks
             currentLabelA.layer?.mask = nil
@@ -516,6 +505,25 @@ class OverlayWindow: NSWindow {
         }
     }
 
+    /// Aligns each gradient mask with its label's text rather than the whole
+    /// label, so the fill starts at the first glyph and ends at the last one.
+    private func syncKaraokeMasks() {
+        syncMask(gradientMaskA, to: currentLabelA)
+        syncMask(gradientMaskB, to: currentLabelB)
+    }
+
+    private func syncMask(_ mask: CAGradientLayer?, to label: NSTextField) {
+        guard let mask else { return }
+        let theme = ThemeManager.shared.theme
+        let textWidth = OverlayLayout.requiredLabelWidth(for: label.stringValue, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
+        let target = OverlayLayout.karaokeMaskFrame(labelBounds: label.bounds, textWidth: textWidth)
+        guard mask.frame != target else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        mask.frame = target
+        CATransaction.commit()
+    }
+
     func updateProgress(_ progress: Double) {
         let theme = ThemeManager.shared.theme
         guard theme.karaokeFillEnabled else { return }
@@ -523,8 +531,7 @@ class OverlayWindow: NSWindow {
         let activeLabel = useA ? currentLabelA : currentLabelB
         guard let mask = activeLabel.layer?.mask as? CAGradientLayer else { return }
 
-        // Update mask frame to match label
-        mask.frame = activeLabel.bounds
+        syncMask(mask, to: activeLabel)
 
         let p = Float(max(0, min(1, progress)))
         let edge = Float(theme.fillEdgeWidth)
@@ -557,7 +564,7 @@ class OverlayWindow: NSWindow {
         gradientMaskA?.removeAnimation(forKey: "karaokeFill")
         gradientMaskB?.removeAnimation(forKey: "karaokeFill")
 
-        let restY: CGFloat = 8
+        let restY = layout.currentTop
         let activeLabel = useA ? currentLabelA : currentLabelB
         let hiddenLabel = useA ? currentLabelB : currentLabelA
         let activeTop = useA ? currentTopA! : currentTopB!
@@ -591,9 +598,10 @@ class OverlayWindow: NSWindow {
             let incomingLabel = useA ? currentLabelB : currentLabelA
             let activeTop = useA ? currentTopA! : currentTopB!
             let incomingTop = useA ? currentTopB! : currentTopA!
-            let restY: CGFloat = 8
+            let restY = layout.currentTop
 
-            incomingLabel.stringValue = current
+            incomingLabel.attributedStringValue = OverlayLayout.attributedText(
+                current, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)
             resizeToFit(currentText: current, nextText: next, animated: theme.transitionStyle != .none)
 
             // Reset karaoke fill on the incoming label to start from 0
@@ -601,9 +609,9 @@ class OverlayWindow: NSWindow {
                 mask.removeAnimation(forKey: "karaokeFill")
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
-                mask.frame = incomingLabel.bounds
                 mask.locations = [0, 0, NSNumber(value: Float(theme.fillEdgeWidth)), 1]
                 CATransaction.commit()
+                syncMask(mask, to: incomingLabel)
             }
 
             switch theme.transitionStyle {
@@ -715,7 +723,9 @@ class OverlayWindow: NSWindow {
                 nextLyricLabel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
                 guard let self else { return }
-                self.nextLyricLabel.stringValue = next
+                let theme = ThemeManager.shared.theme
+                self.nextLyricLabel.attributedStringValue = OverlayLayout.attributedText(
+                    next, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
                 let opacity = ThemeManager.shared.theme.nextLineOpacity
                 NSAnimationContext.runAnimationGroup { ctx in
                     ctx.duration = 0.2
