@@ -49,12 +49,20 @@ There is no version constant in `Sources/` to bump.
   `generate_release_notes: true` is set, but the action does not overwrite a body
   that already exists. Use `gh release edit vX.Y.Z --notes-file notes.md`.
 
-- **The cask's Homebrew deprecations are deliberate.** Homebrew 7.0.1 warns that
-  `postflight` and `depends_on macos: ">= :ventura"` are deprecated, but
-  `postflight_steps` cannot see `appdir` — `InstallStepsContext` in
-  `cask_artifact.rb` exposes only `staged_path`, `caskroom_path`, `home` and
-  `config`. Naively "fixing" the warning breaks the install with
-  `undefined local variable or method 'appdir'`, which leaves the app quarantined.
+- **The cask's `xattr` step reaches `appdir` through a token, not a variable.**
+  `postflight_steps` is a declarative DSL, so `#{appdir}` does not resolve there —
+  `InstallStepsContext` in `cask_artifact.rb` still exposes only `staged_path`,
+  `caskroom_path`, `home` and `config`. Write `{{appdir}}` instead: `Runner`
+  expands template tokens in a `run` step's `args`, and `root_path` falls back to
+  `config.appdir` for any token without its own reader. Interpolating `#{appdir}`
+  breaks the install with `undefined local variable or method 'appdir'`, which
+  leaves the app quarantined.
+
+- **`depends_on macos: :ventura` is not stricter than `">= :ventura"`.** The
+  symbol form looks like an exact-version match but `Cask::DSL::DependsOn#macos=`
+  parses it with `comparator: ">="`, so the two are identical; `brew info` still
+  reports `macOS >= 13`. The string form is the deprecated spelling of the same
+  requirement.
 
 - **Builds are ad-hoc signed, never notarized.** Homebrew warns "yalyric's signer
   changed" on every upgrade, and macOS may re-prompt for Apple Events access to
