@@ -28,6 +28,10 @@ class SettingsManager: ObservableObject {
         didSet { UserDefaults.standard.set(lyricsLanguage.rawValue, forKey: "lyricsLanguage") }
     }
 
+    @Published var secondaryLine: SecondaryLine {
+        didSet { UserDefaults.standard.set(secondaryLine.rawValue, forKey: "secondaryLine") }
+    }
+
     @Published var providerOrder: [String] {
         didSet { UserDefaults.standard.set(providerOrder, forKey: "providerOrder") }
     }
@@ -71,6 +75,13 @@ class SettingsManager: ObservableObject {
             lyricsLanguage = lang
         } else {
             lyricsLanguage = .auto
+        }
+
+        if let savedSecond = UserDefaults.standard.string(forKey: "secondaryLine"),
+           let second = SecondaryLine(rawValue: savedSecond) {
+            secondaryLine = second
+        } else {
+            secondaryLine = .nextLine
         }
 
         let savedOrder = UserDefaults.standard.stringArray(forKey: "providerOrder") ?? []
@@ -221,6 +232,17 @@ struct GeneralTab: View {
                         .controlSize(.small)
                 }
                 Text("Positive = lyrics appear earlier, negative = later")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Second Line") {
+                Picker("Show below the current line", selection: $settings.secondaryLine) {
+                    ForEach(SecondaryLine.allCases, id: \.rawValue) { choice in
+                        Text(choice.rawValue).tag(choice)
+                    }
+                }
+                Text("Translation and romaji come from NetEase, and only for tracks it has them for. Lines without one fall back to showing the next lyric.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

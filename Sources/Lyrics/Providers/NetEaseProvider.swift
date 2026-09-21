@@ -73,7 +73,11 @@ public struct NetEaseProvider: LyricsProvider {
     }
 
     private func fetchLyrics(songID: Int) async throws -> Lyrics? {
-        guard let url = URL(string: "https://music.163.com/api/song/lyric?id=\(songID)&lv=1") else { return nil }
+        // tv=1 asks for the translation, rv=1 for the romaji transliteration.
+        // Both arrive in the same response as the original, written from the
+        // same source and sharing its timestamps.
+        guard let url = URL(string: "https://music.163.com/api/song/lyric?id=\(songID)&lv=1&tv=1&rv=1")
+        else { return nil }
 
         var request = providerRequest(url: url, userAgent: "Mozilla/5.0")
         request.setValue("https://music.163.com", forHTTPHeaderField: "Referer")
@@ -82,15 +86,29 @@ public struct NetEaseProvider: LyricsProvider {
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else { return nil }
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let lrc = json["lrc"] as? [String: Any],
-              let lyricStr = lrc["lyric"] as? String else { return nil }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return Self.lyrics(from: json)
+    }
 
-        let lines = LRCParser.parse(lyricStr)
-        if !lines.isEmpty {
-            return Lyrics(lines: lines, source: .netease, isSynced: true)
+    /// Decodes the three parallel payloads into one set of lines. Split out from
+    /// the network call so the pairing is testable without a request.
+    ///
+    /// `tlyric` and `romalrc` are routinely present but empty — an instrumental,
+    /// or a track nobody has translated — which is not an error, just a track
+    /// with no second line to offer.
+    static func lyrics(from json: [String: Any]) -> Lyrics? {
+        func parse(_ key: String) -> [LyricLine] {
+            guard let payload = json[key] as? [String: Any],
+                  let text = payload["lyric"] as? String else { return [] }
+            return LRCParser.parse(text)
         }
 
-        return nil
+        let original = parse("lrc")
+        guard !original.isEmpty else { return nil }
+
+        let lines = LyricAlignment.merge(original: original,
+                                         translation: parse("tlyric"),
+                                         romaji: parse("romalrc"))
+        return Lyrics(lines: lines, source: .netease, isSynced: true)
     }
 }

@@ -28,9 +28,10 @@ non-empty lines, `tlyric` and `romalrc` had 42 each, and **all 42 translation
 timestamps matched an original timestamp exactly**. The four unmatched originals
 were the credit lines clustered at 0.0–0.64s.
 
-That exactness is what makes this cheap. Pairing original to translation is a key
-lookup, not fuzzy nearest-neighbour alignment — so there is no tolerance window to
-tune and no class of bug where the wrong translation appears under a line.
+That agreement is what makes this cheap. The two payloads come from one source
+and already share a timeline, so pairing needs only a narrow tolerance to absorb
+notation differences — not the fuzzy alignment that matching two *different*
+providers would demand, where the wrong translation can land under a line.
 
 ## User-Visible Behaviour
 
@@ -91,13 +92,19 @@ static func merge(original: [LyricLine],
                   romaji: [LyricLine]) -> [LyricLine]
 ```
 
-Pairing is keyed on **milliseconds rounded to an integer**, never on raw
-`TimeInterval`. Two reasons:
+Pairing uses a **±50ms tolerance window**, taking the nearest candidate, rather
+than matching timestamps for equality. Two reasons:
 
 1. Float equality across two independent parse passes is a trap.
-2. `LRCParser`'s centisecond branch already treats `[00:21.3]` and `[00:21.30]`
-   as different times (0.03s vs 0.30s). Integer keys make that difference
-   irrelevant to pairing rather than silently dropping half the translations.
+2. `LRCParser`'s centisecond branch treats `[00:21.3]` as 21.03s but
+   `[00:21.30]` as 21.30s. An exact key — including an integer-millisecond one —
+   would silently drop every line whose notation happened to differ between
+   payloads, leaving the user with no translation and no error. Only a tolerance
+   window absorbs that.
+
+(An earlier draft of this spec claimed integer-millisecond keying solved point 2.
+It does not: 21030 and 21300 are still different keys. Corrected during
+implementation.)
 
 Two guards: a translation whose text is identical to the original is dropped
 (nothing to show), and an empty-but-present `tlyric` is treated as absent.
@@ -141,6 +148,18 @@ since making the field optional later would silently reintroduce the bug.
 
 Memory cache is process-local and needs no handling.
 
+A second staleness path turned up during implementation, which `schemaVersion`
+does not cover: the winning provider now depends on the second-line setting, so
+a track cached under `Next Line` would keep serving its untranslated result after
+the user switches to `Chinese Translation` — for every track already played.
+`LyricsManager.cacheKey` therefore folds the mode into the key, and the default
+mode deliberately keys on the bare track ID so existing caches survive untouched
+for anyone who never turns this on.
+
+Note this is a pre-existing bug for `lyricsLanguage`, which has the same
+dependency and no such handling; `clearCache()` exists but is called from
+nowhere. Out of scope here.
+
 ### Sync (`Sources/Sync/SyncEngine.swift`)
 
 One new `@Published var secondaryLine: String`, resolved per line against a
@@ -170,7 +189,7 @@ Chinese line resizes the pill correctly for free.
 ```
 NetEaseProvider.fetchLyrics
     ↓ lrc + tlyric + romalrc → LRCParser (×3)
-LyricAlignment.merge (round-to-ms key)
+LyricAlignment.merge (±50ms nearest match)
     ↓ [LyricLine] carrying translation/romaji
 LyricsManager (hasTranslation +2, maxScore 5→7)
     ↓ $currentLyrics

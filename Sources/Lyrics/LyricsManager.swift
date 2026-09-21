@@ -107,13 +107,23 @@ public class LyricsManager: ObservableObject {
 
     // MARK: - Scoring
 
-    private static let maxScore = 5
+    /// The score at which the fetch stops waiting for slower providers.
+    ///
+    /// This has to rise with the translation bonus, not stay fixed. A synced,
+    /// language-matching LRCLIB result with more than five lines scores exactly
+    /// 5 — the old ceiling — so leaving it alone would let LRCLIB cancel the
+    /// task group before NetEase ever answers, and the second line would fall
+    /// back to the next lyric on tracks NetEase has a translation for.
+    static func maxScore(for secondary: SecondaryLine) -> Int {
+        secondary == .nextLine ? 5 : 7
+    }
 
     static func scoreLyrics(
         _ lyrics: Lyrics,
         langPref: LyricsLanguagePreference,
         trackName: String,
-        trackArtist: String
+        trackArtist: String,
+        secondary: SecondaryLine = .nextLine
     ) -> Int {
         var score = 0
         if lyrics.isSynced { score += 3 }
@@ -122,7 +132,32 @@ public class LyricsManager: ObservableObject {
             trackName: trackName, trackArtist: trackArtist
         ) { score += 1 }
         if lyrics.lines.count > 5 { score += 1 }
+        if carriesSecondLine(lyrics, secondary) { score += 2 }
         return score
+    }
+
+    /// Whether this result can actually supply the second line the user asked
+    /// for. Scoring stays untouched in `Next Line` mode, so provider selection
+    /// is bit-identical to before for anyone who never turns this on.
+    private static func carriesSecondLine(_ lyrics: Lyrics, _ secondary: SecondaryLine) -> Bool {
+        switch secondary {
+        case .nextLine:    return false
+        case .translation: return lyrics.hasTranslation
+        case .romaji:      return lyrics.hasRomaji
+        }
+    }
+
+    // MARK: - Cache identity
+
+    /// Which cache entry a track maps to.
+    ///
+    /// The winning provider now depends on the second-line setting, so the key
+    /// has to as well — otherwise switching to a translation keeps serving the
+    /// untranslated result already cached for every track played so far.
+    /// The default mode deliberately keys on the bare track ID, so users who
+    /// never touch the setting keep their existing cache intact.
+    static func cacheKey(trackID: String, secondary: SecondaryLine) -> String {
+        secondary == .nextLine ? trackID : "\(trackID)|\(secondary.rawValue)"
     }
 
     // MARK: - Fetch (parallel)
@@ -131,7 +166,8 @@ public class LyricsManager: ObservableObject {
     private var currentTrackID: String?
 
     func fetchLyrics(for track: TrackInfo) {
-        let trackID = track.id
+        let secondary = SecondaryLine(rawValue: AppConfig.get(AppConfig.General.secondaryLine)) ?? .nextLine
+        let trackID = Self.cacheKey(trackID: track.id, secondary: secondary)
         currentTrackID = trackID
 
         YalyricLog.info("[yalyric] Fetching lyrics for: \(track.name) — \(track.artist) (duration: \(String(format: "%.1fs", track.duration)), id: \(track.spotifyID))")
@@ -162,6 +198,7 @@ public class LyricsManager: ObservableObject {
         errorMessage = nil
 
         let langPref = LyricsLanguagePreference(rawValue: AppConfig.get(AppConfig.General.lyricsLanguage)) ?? .auto
+        let ceiling = Self.maxScore(for: secondary)
         let providers = orderedProviders
         YalyricLog.info("[yalyric] Querying \(providers.count) providers in parallel...")
 
@@ -193,8 +230,9 @@ public class LyricsManager: ObservableObject {
                     collected.append((index, lyrics))
 
                     // Early return on perfect match — no need to wait for slower providers
-                    let score = Self.scoreLyrics(lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist)
-                    if score >= Self.maxScore {
+                    let score = Self.scoreLyrics(lyrics, langPref: langPref, trackName: track.name,
+                                                 trackArtist: track.artist, secondary: secondary)
+                    if score >= ceiling {
                         YalyricLog.info("[yalyric]   Perfect score (\(score)) from \(lyrics.source.rawValue), cancelling others")
                         group.cancelAll()
                         break
@@ -214,7 +252,8 @@ public class LyricsManager: ObservableObject {
 
             // Pick the best result: highest score, then provider order as tiebreaker
             let scored = results.map { r in
-                (r.index, r.lyrics, Self.scoreLyrics(r.lyrics, langPref: langPref, trackName: track.name, trackArtist: track.artist))
+                (r.index, r.lyrics, Self.scoreLyrics(r.lyrics, langPref: langPref, trackName: track.name,
+                                                    trackArtist: track.artist, secondary: secondary))
             }.sorted { lhs, rhs in
                 if lhs.2 != rhs.2 { return lhs.2 > rhs.2 }
                 return lhs.0 < rhs.0

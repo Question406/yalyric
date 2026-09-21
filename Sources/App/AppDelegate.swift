@@ -35,6 +35,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupBindings()
         showOnboardingIfNeeded()
         syncEngine.offset = SettingsManager.shared.lyricsOffset
+        syncEngine.secondaryContent = SettingsManager.shared.secondaryLine
         playerManager.startPolling()
 
         let hk = HotkeyManager.shared
@@ -308,6 +309,23 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             .store(in: &cancellables)
 
+        // Which content the overlay's second line shows. Changing this changes
+        // which provider wins, so the already-fetched lyrics are re-requested;
+        // LyricsManager keys its cache on the mode, so this is a cache hit once
+        // each mode has been seen for a track.
+        SettingsManager.shared.$secondaryLine
+            .dropFirst()
+            .sink { [weak self] mode in
+                guard let self else { return }
+                self.syncEngine.secondaryContent = mode
+                if let track = self.playerManager.currentTrack {
+                    self.lyricsManager.fetchLyrics(for: track)
+                }
+                self.lastDisplayedLineIndex = -2  // force redraw
+                self.updateAllDisplays()
+            }
+            .store(in: &cancellables)
+
         // Sync offset from settings
         SettingsManager.shared.$lyricsOffset
             .sink { [weak self] offset in
@@ -397,7 +415,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard !allDisplaysHidden else { return }
         updateScreenTargets()
         let currentLine = syncEngine.currentLine
-        let nextLine = syncEngine.nextLine
+        // Whatever the user chose for the slot under the current line:
+        // the upcoming lyric, a translation, or romaji.
+        let secondLine = syncEngine.secondaryLine
         let index = syncEngine.currentLineIndex
         let lines = syncEngine.allLines
         let track = playerManager.currentTrack
@@ -492,7 +512,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let isSynced = lyricsManager.currentLyrics?.isSynced ?? false
         forEachOverlay { $0.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced) }
         menuBarController?.updateSource(lyricsManager.currentLyrics?.source, isSynced: isSynced)
-        forEachOverlay { $0.updateLyrics(current: currentLine, next: nextLine) }
+        forEachOverlay { $0.updateLyrics(current: currentLine, next: secondLine) }
         forEachOverlay { $0.updateProgress(syncEngine.progress) }
         menuBarController?.updateProgress(syncEngine.progress)
         forEachWidget { $0.updateLyrics(lines: lines, currentIndex: index) }

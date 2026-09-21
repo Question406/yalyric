@@ -102,6 +102,9 @@ enum AppConfig {
         static let lyricsOffset = Key<Double>("lyricsOffset", default: 0)
         static let lyricsLanguage = Key<String>("lyricsLanguage", default: "Auto")
         static let widgetLineCount = Key<Int>("widgetLineCount", default: 5)
+        /// What the overlay's second line shows; see `SecondaryLine`.
+        /// Defaults to the upcoming lyric, i.e. the behaviour before bilingual support.
+        static let secondaryLine = Key<String>("secondaryLine", default: SecondaryLine.nextLine.rawValue)
     }
 
     // MARK: - Sources
