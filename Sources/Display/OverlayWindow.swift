@@ -6,6 +6,10 @@ class OverlayWindow: NSWindow {
     private let currentLabelA = NSTextField(labelWithString: "")
     private let currentLabelB = NSTextField(labelWithString: "")
     private let nextLyricLabel = NSTextField(labelWithString: "")
+    /// The line under the current one: the upcoming lyric, or a translation.
+    var secondLineLabel: NSTextField { nextLyricLabel }
+    /// Both halves of the current-line A/B pair, in no particular order.
+    var currentLineLabels: [NSTextField] { [currentLabelA, currentLabelB] }
     private let sourceLabel = NSTextField(labelWithString: "")
     private var useA = true
 
@@ -26,6 +30,12 @@ class OverlayWindow: NSWindow {
     private var mouseTrackingTimer: Timer?
     private var anchoredCenterX: CGFloat = 0  // stable center for resizeToFit
     private var lastTargetWidth: CGFloat = 0  // prevents redundant animations
+    /// Width for the whole track, computed once when lyrics load. While this is
+    /// set the window never resizes on a line change.
+    private var pinnedWidth: CGFloat?
+    /// Kept so a font or width change can re-measure the same track.
+    private var pinnedLyrics: Lyrics?
+    private var pinnedSecondary: SecondaryLine = .nextLine
     private var frameAnimator: FrameAnimator!
     private(set) var isEditMode = false
     private var lastPositionKey: String = ""  // tracks position-related theme state
@@ -286,7 +296,14 @@ class OverlayWindow: NSWindow {
         }
 
         nextLyricLabel.font = theme.nextLineFont
-        nextLyricLabel.textColor = theme.textColor.withAlphaComponent(theme.nextLineOpacity)
+        // Opacity lives in `alphaValue` alone, never also in the text colour.
+        // The two multiply: with the dimming baked into both, the label started
+        // at 1.0 × 0.5 and fell to 0.5 × 0.5 the first time `updateLyrics`
+        // faded it back in — a one-way brightness cliff on the first line
+        // change. The current-line labels already follow this rule, which is
+        // why they never showed the same fault.
+        nextLyricLabel.textColor = theme.textColor
+        nextLyricLabel.alphaValue = theme.nextLineOpacity
         nextLyricLabel.shadow = shadow
         nextLyricLabel.attributedStringValue = OverlayLayout.attributedText(
             nextLyricLabel.stringValue, font: theme.nextLineFont, letterSpacing: theme.letterSpacing)
@@ -311,9 +328,15 @@ class OverlayWindow: NSWindow {
 
         applyKaraokeFill(theme)
 
-        // Re-apply dynamic width with current text (handles font/size changes)
-        let activeLabel = useA ? currentLabelA : currentLabelB
-        resizeToFit(currentText: activeLabel.stringValue, nextText: nextLyricLabel.stringValue, animated: false)
+        // Re-apply width for the new fonts. A pinned track is re-measured
+        // rather than resized to the current line, so a font change cannot
+        // quietly reintroduce per-line sizing.
+        if pinnedLyrics != nil {
+            pinTrackWidth(for: pinnedLyrics, secondary: pinnedSecondary)
+        } else {
+            let activeLabel = useA ? currentLabelA : currentLabelB
+            resizeToFit(currentText: activeLabel.stringValue, nextText: nextLyricLabel.stringValue, animated: false)
+        }
     }
 
     private func applyBackground(_ theme: Theme) {
@@ -409,10 +432,14 @@ class OverlayWindow: NSWindow {
             self.frameAnimator.cancel()
             self.anchoredCenterX = newFrame.midX
             self.setFrame(newFrame, display: true)
-            // Shrink back to the text immediately instead of waiting for the next line
+            // Restore the width immediately instead of waiting for the next line
             self.lastTargetWidth = 0
-            let activeLabel = self.useA ? self.currentLabelA : self.currentLabelB
-            self.resizeToFit(currentText: activeLabel.stringValue, nextText: self.nextLyricLabel.stringValue, animated: false)
+            if self.pinnedWidth != nil {
+                self.applyPinnedWidth()
+            } else {
+                let activeLabel = self.useA ? self.currentLabelA : self.currentLabelB
+                self.resizeToFit(currentText: activeLabel.stringValue, nextText: self.nextLyricLabel.stringValue, animated: false)
+            }
         }
 
         if animated && alphaValue > 0 {
@@ -436,11 +463,53 @@ class OverlayWindow: NSWindow {
 
     // MARK: - Dynamic Width
 
+    /// Sizes the overlay for an entire track, once.
+    ///
+    /// Following the text meant resizing 75–175pt on every line change: smooth
+    /// at 60fps, but the pill grew and shrank and the centred lyric slid
+    /// sideways through each crossfade. Measuring the track up front removes
+    /// the motion completely. Passing nil restores per-line sizing.
+    func pinTrackWidth(for lyrics: Lyrics?, secondary: SecondaryLine) {
+        pinnedLyrics = lyrics
+        pinnedSecondary = secondary
+        guard let lyrics, !lyrics.lines.isEmpty else {
+            pinnedWidth = nil
+            return
+        }
+        let theme = ThemeManager.shared.theme
+        let secondaryTexts: [String]
+        switch secondary {
+        // The upcoming lyric is another line of the same track, so it is
+        // already accounted for by the line texts themselves.
+        case .nextLine:    secondaryTexts = []
+        case .translation: secondaryTexts = lyrics.lines.compactMap(\.translation)
+        case .romaji:      secondaryTexts = lyrics.lines.compactMap(\.romaji)
+        }
+        pinnedWidth = OverlayLayout.trackWidth(
+            lineTexts: lyrics.lines.map(\.text), secondaryTexts: secondaryTexts,
+            currentFont: theme.currentLineFont, nextFont: theme.nextLineFont,
+            letterSpacing: theme.letterSpacing, maxWidth: theme.overlayWidth)
+        applyPinnedWidth()
+    }
+
+    private func applyPinnedWidth() {
+        guard let pinnedWidth,
+              ThemeManager.shared.theme.backgroundStyle != .bar else { return }
+        lastTargetWidth = pinnedWidth
+        frameAnimator.cancel()
+        setFrame(NSRect(x: anchoredCenterX - pinnedWidth / 2, y: frame.origin.y,
+                        width: pinnedWidth, height: layout.height), display: true)
+        contentView?.layoutSubtreeIfNeeded()
+        syncKaraokeMasks()
+    }
+
     private func resizeToFit(currentText: String, nextText: String, animated: Bool) {
         let theme = ThemeManager.shared.theme
 
         // Bar mode stays full-width
         if theme.backgroundStyle == .bar { return }
+        // The track's width is fixed; no line may move it.
+        if pinnedWidth != nil { return }
 
         // Measure what the label needs, not the bare glyph run: NSTextFieldCell
         // pads the text, and a label sized to the glyph width truncates with "…".
@@ -599,6 +668,26 @@ class OverlayWindow: NSWindow {
             let activeTop = useA ? currentTopA! : currentTopB!
             let incomingTop = useA ? currentTopB! : currentTopA!
             let restY = layout.currentTop
+
+            // The A/B pair recycles the outgoing label as the next incoming one.
+            // When a line change interrupts a transition still in flight, that
+            // label is on screen at around half opacity, and writing the new
+            // text into it substitutes the previous line in place rather than
+            // fading it out. Hide it first, with implicit animations suppressed:
+            // CoreAnimation starts a new animation from the *presentation* value,
+            // so a plain `alphaValue = 0` here is smoothed straight over and the
+            // swap stays visible. Playback polls every 0.5s and the transition
+            // also runs 0.5s, so these collide regularly rather than rarely.
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            incomingLabel.layer?.removeAllAnimations()
+            incomingLabel.alphaValue = 0
+            CATransaction.commit()
+            // Commit alone only updates the model; the presentation layer still
+            // reports the mid-fade value until the next runloop turn, and that
+            // is exactly what `animator()` uses as its fromValue. Flush so the
+            // presentation catches up before the new animation is built.
+            CATransaction.flush()
 
             incomingLabel.attributedStringValue = OverlayLayout.attributedText(
                 current, font: theme.currentLineFont, letterSpacing: theme.letterSpacing)

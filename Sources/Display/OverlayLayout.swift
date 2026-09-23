@@ -53,6 +53,32 @@ enum OverlayLayout {
         return min(maxWidth, max(minWidth, text + horizontalPadding * 2))
     }
 
+    /// Width that fits every line of a whole track, so the window can be sized
+    /// once when lyrics load rather than following each line.
+    ///
+    /// Tracking the text meant resizing 75–175pt on every line change. That was
+    /// smooth — a clean 60fps — but the pill visibly grew and shrank and the
+    /// centred lyric slid sideways for the length of each crossfade. Bilingual
+    /// lyrics made it far worse, because the width came from the wider of an
+    /// original line and its translation, and the two scripts have very
+    /// different metrics.
+    ///
+    /// `secondaryTexts` are measured in the next-line font because that is the
+    /// slot they occupy; they still have to count, or a long translation would
+    /// truncate for the entire song.
+    static func trackWidth(lineTexts: [String], secondaryTexts: [String],
+                           currentFont: NSFont, nextFont: NSFont,
+                           letterSpacing: CGFloat, maxWidth: CGFloat) -> CGFloat {
+        var widest: CGFloat = 0
+        for text in lineTexts {
+            widest = max(widest, requiredLabelWidth(for: text, font: currentFont, letterSpacing: letterSpacing))
+        }
+        for text in secondaryTexts {
+            widest = max(widest, requiredLabelWidth(for: text, font: nextFont, letterSpacing: letterSpacing))
+        }
+        return min(maxWidth, max(minWidth, widest + horizontalPadding * 2))
+    }
+
     // MARK: - Vertical layout
 
     struct Vertical: Equatable {

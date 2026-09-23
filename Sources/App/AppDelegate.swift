@@ -297,6 +297,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .sink { [weak self] lyrics in
                 self?.lastDisplayedLineIndex = -2
                 self?.syncEngine.setLyrics(lyrics)
+                // Size the overlay for the whole track now, so no line change moves it.
+                let mode = self?.syncEngine.secondaryContent ?? .nextLine
+                self?.forEachOverlay { $0.pinTrackWidth(for: lyrics, secondary: mode) }
             }
             .store(in: &cancellables)
 
@@ -318,6 +321,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .sink { [weak self] mode in
                 guard let self else { return }
                 self.syncEngine.secondaryContent = mode
+                let lyrics = self.lyricsManager.currentLyrics
+                self.forEachOverlay { $0.pinTrackWidth(for: lyrics, secondary: mode) }
                 if let track = self.playerManager.currentTrack {
                     self.lyricsManager.fetchLyrics(for: track)
                 }
