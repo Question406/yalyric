@@ -1,183 +1,325 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>yalyric — Real-time Spotify Lyrics on macOS</title>
-    <meta name="description" content="A native macOS app that syncs Spotify lyrics to your desktop. Lightweight, no Electron, no web views.">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Display', 'Helvetica Neue', 'sans-serif'] }
-                }
-            }
-        }
-    </script>
-    <style>
-        .glass { background: rgba(255,255,255,0.06); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); }
-        .glow { box-shadow: 0 0 60px rgba(99,102,241,0.15), 0 0 120px rgba(99,102,241,0.05); }
-        .gradient-text { background: linear-gradient(135deg, #818cf8, #c084fc, #f472b6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        body { background: #0a0a0f; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>yalyric — synced lyrics on your Mac desktop</title>
+<meta name="description" content="A native macOS menu bar app that shows synced lyrics from Spotify and Apple Music on your desktop, with karaoke fill and an optional translation line.">
+<meta property="og:title" content="yalyric">
+<meta property="og:description" content="Synced lyrics from Spotify and Apple Music on your Mac desktop. Native Swift, no Electron.">
+<meta property="og:image" content="https://question406.github.io/yalyric/icon.png">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Brand: the app icon's ink tile and coral fill. One dark look, by choice. */
+:root{
+  color-scheme:dark;
+  --ink:#17142E; --ink-deep:#100E22; --ink-raised:#1F1B3B; --ink-line:#2E2A4E;
+  --coral:#FF6F61; --coral-soft:#FF8F84;
+  --text:#F3F1FA; --text-2:#B4B0CC; --text-3:#827DA3;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ink-deep);color:var(--text);font:16px/1.6 var(--body);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:-.015em;text-wrap:balance}
+p{margin:0}
+code,kbd{font-family:var(--mono)}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:24px}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--coral)}
+section{padding-block:88px}
+section + section{border-top:1px solid var(--ink-line)}
+.section-head{display:grid;gap:12px;margin-bottom:40px;max-width:640px}
+.section-head h2{font-size:clamp(28px,4vw,40px);line-height:1.1}
+.section-head p{color:var(--text-2)}
+:focus-visible{outline:2px solid var(--coral);outline-offset:3px;border-radius:6px}
+
+/* Top bar */
+.top{display:flex;align-items:center;justify-content:space-between;padding-block:20px}
+.brand{display:flex;align-items:center;gap:10px;font:700 20px var(--display);text-decoration:none}
+.brand img{width:34px;height:34px}
+.top nav{display:flex;gap:22px;font-size:14px;color:var(--text-2)}
+.top nav a{text-decoration:none}
+.top nav a:hover{color:var(--text)}
+
+/* Hero */
+.hero{padding-block:56px 88px;display:grid;grid-template-columns:1fr 1.15fr;gap:56px;align-items:center}
+.hero-copy{display:grid;gap:22px}
+.hero h1{font-size:clamp(44px,6.4vw,76px);line-height:.98;font-weight:800}
+.hero h1 .sung{color:var(--coral)}
+.hero .lede{font-size:19px;color:var(--text-2);max-width:34ch}
+.ctas{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:12px;font-weight:600;text-decoration:none;transition:background .15s,border-color .15s}
+.btn.primary{background:var(--coral);color:var(--ink)}
+.btn.primary:hover{background:var(--coral-soft)}
+.btn.ghost{border:1px solid var(--ink-line);color:var(--text)}
+.btn.ghost:hover{border-color:var(--text-3)}
+.meta{font:13px var(--mono);color:var(--text-3)}
+
+/* Desktop mock: menu bar + floating overlay */
+.desk{position:relative;aspect-ratio:16/11;max-width:100%;border-radius:18px;overflow:hidden;background:var(--ink);border:1px solid var(--ink-line)}
+.desk::before{content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(120% 90% at 85% 110%, #3A2350 0%, transparent 60%),
+    radial-gradient(90% 70% at 0% 0%, #1D2A4F 0%, transparent 55%);}
+.menubar{position:absolute;inset:0 0 auto 0;height:30px;display:flex;align-items:center;justify-content:flex-end;gap:16px;padding-inline:14px;background:rgba(16,14,34,.55);backdrop-filter:blur(10px);font-size:12.5px;color:var(--text)}
+.menubar .glyph{width:17px;height:17px;color:var(--text)}
+.menubar .now{max-width:46%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-2)}
+.overlay{position:absolute;left:50%;bottom:14%;transform:translateX(-50%);width:max-content;max-width:88%;padding:16px 28px;border-radius:16px;background:rgba(10,9,24,.62);backdrop-filter:blur(14px);text-align:center;display:grid;gap:4px}
+.line{position:relative;font:700 clamp(18px,2.6vw,28px)/1.25 var(--body);white-space:nowrap}
+.line .base{color:rgba(243,241,250,.34)}
+.line .fill{position:absolute;inset:0;color:var(--coral);clip-path:inset(0 100% 0 0);animation:sing 5.5s linear infinite}
+@keyframes sing{0%,6%{clip-path:inset(0 100% 0 0)}82%,100%{clip-path:inset(0 0 0 0)}}
+.second{font:500 clamp(13px,1.6vw,17px)/1.3 var(--body);color:var(--text-2)}
+.source{position:absolute;right:16px;bottom:12px;font:11px var(--mono);color:var(--text-3)}
+@media (prefers-reduced-motion:reduce){.line .fill{animation:none;clip-path:inset(0 38% 0 0)}html{scroll-behavior:auto}}
+
+/* Features */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--ink-line);border:1px solid var(--ink-line);border-radius:16px;overflow:hidden}
+.feature{background:var(--ink-deep);padding:26px 24px;display:grid;gap:8px;align-content:start}
+.feature h3{font-size:19px}
+.feature p{color:var(--text-2);font-size:15px}
+.feature .tag{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-3)}
+
+/* Modes */
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.mode{border:1px solid var(--ink-line);border-radius:16px;padding:22px;display:grid;gap:14px;background:var(--ink)}
+.mode h3{font-size:19px}
+.mode p{color:var(--text-2);font-size:15px}
+.mode .pic{height:120px;border-radius:10px;background:var(--ink-deep);position:relative;overflow:hidden;display:grid;place-items:center}
+.pic .ov{background:rgba(255,255,255,.06);border-radius:8px;padding:8px 14px;display:grid;gap:5px;justify-items:center}
+.bar{height:8px;border-radius:4px;background:rgba(243,241,250,.25)}
+.bar.c{background:var(--coral)}
+.pic .wd{display:grid;gap:7px;justify-items:start;width:62%}
+.pic .mb{position:absolute;inset:0 0 auto 0;height:20px;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-inline:10px}
+
+/* Shortcuts */
+.keys{display:grid;max-width:620px;border:1px solid var(--ink-line);border-radius:14px;overflow:hidden;background:var(--ink)}
+.key{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px}
+.key + .key{border-top:1px solid var(--ink-line)}
+.key span{color:var(--text-2);font-size:15px}
+kbd{font-size:13px;padding:3px 7px;border-radius:6px;border:1px solid var(--ink-line);border-bottom-width:2px;background:var(--ink-raised);color:var(--text);white-space:nowrap}
+
+/* Install */
+.install{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.step{display:grid;gap:12px;align-content:start}
+.step h3{font-size:19px}
+.step p{color:var(--text-2);font-size:15px}
+.step .rec{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--coral)}
+pre{margin:0;padding:14px 16px;border-radius:10px;background:var(--ink);border:1px solid var(--ink-line);font:13.5px/1.7 var(--mono);color:var(--text);overflow-x:auto}
+pre .p{color:var(--text-3);user-select:none}
+
+/* Start */
+.start{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;counter-reset:s;margin:0;padding:0}
+.start li{list-style:none;display:grid;gap:8px;align-content:start}
+.start li::before{counter-increment:s;content:counter(s);font:700 44px/1 var(--display);color:var(--coral)}
+.start p{color:var(--text-2)}
+.inline-glyph{width:16px;height:16px;vertical-align:-3px;color:var(--text)}
+
+footer{border-top:1px solid var(--ink-line);padding-block:40px 56px;color:var(--text-3);font-size:14px}
+footer .row{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+footer nav{display:flex;gap:18px}
+footer a{text-decoration:none;color:var(--text-2)}
+footer a:hover{color:var(--text)}
+footer .fine{margin-top:18px;font-size:12.5px;max-width:70ch}
+
+@media (max-width:900px){
+  .hero{grid-template-columns:1fr;gap:40px}
+  .features,.modes,.install,.start{grid-template-columns:1fr 1fr}
+}
+@media (max-width:600px){
+  .wrap{padding-inline:16px}
+  .top nav{display:none}
+  section{padding-block:64px}
+  .features,.modes,.install,.start{grid-template-columns:1fr}
+  .desk{aspect-ratio:4/3}
+  .overlay{padding:12px 16px}
+}
+</style>
 </head>
-<body class="text-white antialiased">
+<body>
 
-    <!-- Hero -->
-    <section class="min-h-screen flex flex-col items-center justify-center px-6 text-center relative overflow-hidden">
-        <!-- Subtle gradient orbs -->
-        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl"></div>
-        <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl"></div>
+<!-- Status-bar glyph, same drawing as MenuBarGlyph.swift (18 pt grid). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="glyph" viewBox="0 0 18 18">
+    <circle cx="3.5" cy="9.5" r="2.5" fill="currentColor"/>
+    <rect x="4.33" y="1" width="1.67" height="8.5" fill="currentColor"/>
+    <path d="M6 1 A5 5 0 0 1 11 6 L9.33 6 A3.33 3.33 0 0 0 6 2.67 Z" fill="currentColor"/>
+    <rect x="1" y="13.5" width="16" height="3" rx="1.5" fill="currentColor" fill-opacity=".35"/>
+    <path d="M2.5 13.5 H11 V16.5 H2.5 A1.5 1.5 0 0 1 2.5 13.5 Z" fill="currentColor"/>
+  </symbol>
+</svg>
 
-        <div class="relative z-10">
-            <div class="text-6xl mb-4">&#9834;</div>
-            <h1 class="text-5xl sm:text-7xl font-bold tracking-tight mb-4">
-                ya<span class="gradient-text">lyric</span>
-            </h1>
-            <p class="text-xl sm:text-2xl text-gray-400 max-w-2xl mb-8">
-                Real-time Spotify lyrics on your macOS desktop.
-                <br class="hidden sm:block">
-                Native, lightweight, beautiful.
-            </p>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#"><img src="icon.png" alt="">yalyric</a>
+    <nav aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#shortcuts">Shortcuts</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/Question406/yalyric">GitHub</a>
+    </nav>
+  </header>
 
-            <div class="flex flex-col sm:flex-row gap-4 justify-center mb-8">
-                <a href="https://github.com/Question406/yalyric/releases" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-semibold transition-colors">
-                    Download
-                </a>
-                <a href="https://github.com/Question406/yalyric" class="px-8 py-3 glass rounded-xl font-semibold hover:bg-white/10 transition-colors">
-                    View on GitHub
-                </a>
-            </div>
+  <div class="hero">
+    <div class="hero-copy">
+      <span class="eyebrow">Yet another lyric app · macOS</span>
+      <h1>Lyrics that <span class="sung">sing along</span> on your desktop.</h1>
+      <p class="lede">yalyric follows whatever Spotify or Apple Music is playing and shows the current line on your desktop, filling in as it's sung.</p>
+      <div class="ctas">
+        <a class="btn primary" href="#install">Install with Homebrew</a>
+        <a class="btn ghost" href="https://github.com/Question406/yalyric/releases/latest">Download .zip</a>
+      </div>
+      <p class="meta">macOS 13+ · Native Swift &amp; AppKit · Apache 2.0</p>
+    </div>
 
-            <p class="text-sm text-gray-500">macOS 13+ &middot; Swift &middot; Apache 2.0</p>
-        </div>
+    <figure class="desk" aria-label="yalyric's floating overlay on a Mac desktop, with the current line partly filled in coral and a Chinese translation underneath" style="margin:0">
+      <div class="menubar">
+        <svg class="glyph" aria-hidden="true"><use href="#glyph"/></svg>
+        <span class="now">Twinkle, Twinkle, Little Star</span>
+        <span>Wed 9:41</span>
+      </div>
+      <div class="overlay">
+        <div class="line"><span class="base">How I wonder what you are</span><span class="fill" aria-hidden="true">How I wonder what you are</span></div>
+        <div class="second">我多么想知道你是什么</div>
+      </div>
+      <span class="source">via LRCLIB · synced</span>
+    </figure>
+  </div>
+</div>
 
-        <!-- TODO: Replace with actual screenshot -->
-        <div class="relative z-10 mt-12 glass rounded-2xl glow p-1 max-w-3xl w-full">
-            <div class="bg-gray-900/80 rounded-xl p-8 text-center">
-                <p class="text-gray-500 text-sm mb-4">Screenshot coming soon</p>
-                <div class="space-y-3 max-w-md mx-auto">
-                    <div class="text-2xl font-bold text-white/90">And I don't want the world to see me</div>
-                    <div class="text-lg text-white/40">'Cause I don't think that they'd understand</div>
-                    <div class="text-xs text-white/20 text-right mt-4">via LRCLIB &middot; synced</div>
-                </div>
-            </div>
-        </div>
-    </section>
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Features</span>
+      <h2>Small app, lots of lyric.</h2>
+      <p>It lives in the menu bar, has no Dock icon, and uses about 65 MB of memory.</p>
+    </div>
+    <div class="features">
+      <div class="feature"><span class="tag">Players</span><h3>Spotify and Apple Music</h3><p>Detects which one is playing and switches automatically. If both are playing, Spotify wins.</p></div>
+      <div class="feature"><span class="tag">Sync</span><h3>Karaoke fill</h3><p>The current line fills with colour in time with the music, so you always know where you are.</p></div>
+      <div class="feature"><span class="tag">Bilingual</span><h3>Translation or romaji</h3><p>Show a Chinese translation or Japanese romaji under the current line instead of the next one, when the lyrics include them.</p></div>
+      <div class="feature"><span class="tag">Sources</span><h3>Parallel lookup</h3><p>Asks LRCLIB, NetEase Cloud Music, Kugou and others at once, and keeps the best synced match.</p></div>
+      <div class="feature"><span class="tag">Matching</span><h3>The right song</h3><p>Checks title, artist and duration before trusting a result, and treats 執迷不悔 and 执迷不悔 as the same title.</p></div>
+      <div class="feature"><span class="tag">Style</span><h3>Themes with a live preview</h3><p>Six presets, five line transitions and full font and colour control, previewed as you edit.</p></div>
+      <div class="feature"><span class="tag">Displays</span><h3>Multi-monitor aware</h3><p>Follow the mouse, follow the focused window, pin to one screen, or show on every screen.</p></div>
+      <div class="feature"><span class="tag">Control</span><h3>Global shortcuts</h3><p>Hide the overlay or nudge the timing without leaving what you're doing. Every binding is configurable.</p></div>
+      <div class="feature"><span class="tag">Speed</span><h3>Instant replays</h3><p>Lyrics are cached on disk, so songs you've played before appear immediately.</p></div>
+    </div>
+  </div>
+</section>
 
-    <!-- Features -->
-    <section class="max-w-6xl mx-auto px-6 py-24">
-        <h2 class="text-3xl sm:text-4xl font-bold text-center mb-16">
-            Everything you need. <span class="text-gray-500">Nothing you don't.</span>
-        </h2>
+<section id="modes">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Display modes</span>
+      <h2>Three places to read along.</h2>
+      <p>Turn on any combination.</p>
+    </div>
+    <div class="modes">
+      <article class="mode">
+        <div class="pic" aria-hidden="true"><div class="ov"><div class="bar c" style="width:120px"></div><div class="bar" style="width:80px;height:5px"></div></div></div>
+        <h3>Floating overlay</h3>
+        <p>An always-on-top line you can click through. Resizes to fit each line and stays centred where you put it.</p>
+      </article>
+      <article class="mode">
+        <div class="pic" aria-hidden="true"><div class="wd"><div class="bar" style="width:70%;height:5px"></div><div class="bar c" style="width:100%"></div><div class="bar" style="width:85%;height:5px"></div><div class="bar" style="width:55%;height:5px"></div></div></div>
+        <h3>Desktop widget</h3>
+        <p>Sits on the wallpaper and shows 3 to 9 lines, with the current one highlighted.</p>
+      </article>
+      <article class="mode">
+        <div class="pic" aria-hidden="true"><div class="mb"><svg width="12" height="12" style="color:var(--text)"><use href="#glyph"/></svg><div class="bar" style="width:70px;height:5px"></div></div><div class="wd" style="width:50%;margin-top:20px"><div class="bar" style="width:80%;height:5px"></div><div class="bar c" style="width:100%;height:6px"></div><div class="bar" style="width:65%;height:5px"></div></div></div>
+        <h3>Menu bar</h3>
+        <p>The current line next to the clock. Click the icon for the full, auto-scrolling lyrics.</p>
+      </article>
+    </div>
+  </div>
+</section>
 
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#127916;</div>
-                <h3 class="font-semibold text-lg mb-2">Three Display Modes</h3>
-                <p class="text-gray-400 text-sm">Floating overlay, desktop widget, or menu bar. Enable any combination.</p>
-            </div>
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#127925;</div>
-                <h3 class="font-semibold text-lg mb-2">Four Lyrics Sources</h3>
-                <p class="text-gray-400 text-sm">LRCLIB, Spotify, Musixmatch, and NetEase queried in parallel. Best result wins.</p>
-            </div>
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#10024;</div>
-                <h3 class="font-semibold text-lg mb-2">Karaoke Fill</h3>
-                <p class="text-gray-400 text-sm">Gradient sweep across the current line in sync with the music. Like Apple Music.</p>
-            </div>
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#127912;</div>
-                <h3 class="font-semibold text-lg mb-2">Six Theme Presets</h3>
-                <p class="text-gray-400 text-sm">Classic, Neon, Minimal, Karaoke, Spotify, Terminal. Plus full customization.</p>
-            </div>
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#9889;</div>
-                <h3 class="font-semibold text-lg mb-2">Native &amp; Fast</h3>
-                <p class="text-gray-400 text-sm">Pure Swift/AppKit. ~65MB RAM. No Electron, no web views, no bloat.</p>
-            </div>
-            <div class="glass rounded-2xl p-6">
-                <div class="text-2xl mb-3">&#127760;</div>
-                <h3 class="font-semibold text-lg mb-2">Language Aware</h3>
-                <p class="text-gray-400 text-sm">Auto-detects song language. Filters mismatched lyrics. Great for CJK music.</p>
-            </div>
-        </div>
-    </section>
+<section id="shortcuts">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Shortcuts</span>
+      <h2>Hands stay on the keyboard.</h2>
+      <p>Defaults below. Change or turn them off in Settings → Shortcuts.</p>
+    </div>
+    <div class="keys">
+      <div class="key"><span>Show or hide the overlay</span><kbd>⌃⌥L</kbd></div>
+      <div class="key"><span>Show or hide everything</span><kbd>⌃⌥H</kbd></div>
+      <div class="key"><span>Lyrics later</span><kbd>⌃⌥→</kbd></div>
+      <div class="key"><span>Lyrics earlier</span><kbd>⌃⌥←</kbd></div>
+      <div class="key"><span>Reset timing</span><kbd>⌃⌥0</kbd></div>
+    </div>
+  </div>
+</section>
 
-    <!-- Install -->
-    <section class="max-w-3xl mx-auto px-6 py-24">
-        <h2 class="text-3xl sm:text-4xl font-bold text-center mb-12">Get Started</h2>
+<section id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Install</span>
+      <h2>Up and running in a minute.</h2>
+      <p>yalyric is open source and ad-hoc signed rather than notarized, so macOS needs to be told to trust it. Homebrew does that for you.</p>
+    </div>
+    <div class="install">
+      <div class="step">
+        <span class="rec">Recommended</span>
+        <h3>Homebrew</h3>
+        <pre><span class="p">$ </span>brew tap Question406/tap
+<span class="p">$ </span>brew install --cask yalyric</pre>
+        <p>Upgrade later with <code>brew upgrade --cask yalyric</code>.</p>
+      </div>
+      <div class="step">
+        <span class="rec" style="color:var(--text-3)">Manual</span>
+        <h3>Download</h3>
+        <pre><span class="p">$ </span>xattr -cr /Applications/yalyric.app</pre>
+        <p>Get the zip from <a href="https://github.com/Question406/yalyric/releases/latest">Releases</a>, drag the app to Applications, then run this to clear the quarantine flag.</p>
+      </div>
+      <div class="step">
+        <span class="rec" style="color:var(--text-3)">Source</span>
+        <h3>Build it</h3>
+        <pre><span class="p">$ </span>git clone https://github.com/Question406/yalyric.git
+<span class="p">$ </span>cd yalyric
+<span class="p">$ </span>swift build &amp;&amp; .build/debug/yalyric</pre>
+        <p>Needs Swift 5.9 or later. No dependencies.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-        <div class="glass rounded-2xl p-8 space-y-6">
-            <div>
-                <h3 class="font-semibold text-lg mb-2">Homebrew</h3>
-                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
-                    <span class="text-gray-500">$</span> brew tap Question406/tap<br>
-                    <span class="text-gray-500">$</span> brew install --cask yalyric
-                </div>
-            </div>
+<section id="start">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">First run</span>
+      <h2>Three steps, then just play music.</h2>
+    </div>
+    <ol class="start">
+      <li><h3>Launch yalyric</h3><p>The <svg class="inline-glyph" aria-label="yalyric menu bar icon"><use href="#glyph"/></svg> icon appears in your menu bar. Allow access to Spotify or Music when macOS asks.</p></li>
+      <li><h3>Play a song</h3><p>Lyrics appear by themselves. Left-click the icon for the full lyrics; right-click for Settings.</p></li>
+      <li><h3>Make it yours</h3><p>Pick a theme, a transition and where the overlay sits. Settings previews the style as you edit it.</p></li>
+    </ol>
+  </div>
+</section>
 
-            <div class="border-t border-white/10 pt-6">
-                <h3 class="font-semibold text-lg mb-2">Manual Download</h3>
-                <p class="text-gray-400 text-sm mb-3">
-                    Download from <a href="https://github.com/Question406/yalyric/releases" class="text-indigo-400 hover:text-indigo-300">GitHub Releases</a>,
-                    unzip, drag to Applications, then:
-                </p>
-                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
-                    <span class="text-gray-500">$</span> xattr -cr /Applications/yalyric.app
-                </div>
-                <p class="text-gray-500 text-xs mt-2">Removes macOS quarantine flag for unsigned apps.</p>
-            </div>
-
-            <div class="border-t border-white/10 pt-6">
-                <h3 class="font-semibold text-lg mb-2">Build from Source</h3>
-                <div class="bg-black/40 rounded-lg p-4 font-mono text-sm text-gray-300">
-                    <span class="text-gray-500">$</span> git clone https://github.com/Question406/yalyric.git<br>
-                    <span class="text-gray-500">$</span> cd yalyric && swift build && .build/debug/yalyric
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- How it works -->
-    <section class="max-w-4xl mx-auto px-6 py-24 text-center">
-        <h2 class="text-3xl sm:text-4xl font-bold mb-12">How It Works</h2>
-
-        <div class="flex flex-col sm:flex-row gap-8 justify-center">
-            <div class="flex-1">
-                <div class="text-4xl mb-3">1</div>
-                <p class="text-gray-400">Launch yalyric. A music note appears in your menu bar.</p>
-            </div>
-            <div class="flex-1">
-                <div class="text-4xl mb-3">2</div>
-                <p class="text-gray-400">Play a song in Spotify. Lyrics appear automatically.</p>
-            </div>
-            <div class="flex-1">
-                <div class="text-4xl mb-3">3</div>
-                <p class="text-gray-400">Customize themes, transitions, and display modes in Settings.</p>
-            </div>
-        </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="border-t border-white/5 py-12 text-center text-sm text-gray-500">
-        <p>
-            Built with Swift &amp; AppKit by
-            <a href="https://github.com/Question406" class="text-gray-400 hover:text-white">Question406</a>
-        </p>
-        <p class="mt-2">
-            <a href="https://github.com/Question406/yalyric" class="text-gray-400 hover:text-white">GitHub</a>
-            &middot;
-            <a href="https://github.com/Question406/yalyric/releases" class="text-gray-400 hover:text-white">Releases</a>
-            &middot;
-            <a href="https://github.com/Question406/yalyric/blob/main/LICENSE" class="text-gray-400 hover:text-white">Apache 2.0</a>
-        </p>
-        <p class="mt-4 text-gray-600 text-xs max-w-md mx-auto">
-            All lyrics are the property of their respective owners. yalyric fetches lyrics from third-party APIs for personal use only.
-        </p>
-    </footer>
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="#" style="font-size:17px"><img src="icon.png" alt="" style="width:28px;height:28px">yalyric</a>
+      <nav aria-label="Links">
+        <a href="https://github.com/Question406/yalyric">GitHub</a>
+        <a href="https://github.com/Question406/yalyric/releases">Releases</a>
+        <a href="https://github.com/Question406/yalyric/issues">Issues</a>
+        <a href="https://github.com/Question406/yalyric/blob/main/LICENSE">Apache 2.0</a>
+      </nav>
+    </div>
+    <p class="fine">Built with Swift &amp; AppKit by <a href="https://github.com/Question406">Question406</a>. Inspired by LyricsX. All lyrics are the property of their respective owners; yalyric fetches them from third-party services for personal use only and is not affiliated with Spotify, Apple or any lyrics provider.</p>
+  </div>
+</footer>
 
 </body>
 </html>
