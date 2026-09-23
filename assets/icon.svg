@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- yalyric app icon. macOS grid: 824×824 squircle-ish tile inset 100 on a 1024 canvas.
+       Render with: swift scripts/render-icon.swift -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#17142E"/>
+  <!-- Geometric note: circle head, straight stem, quarter-ring flag -->
+  <g fill="#FF6F61">
+    <circle cx="307" cy="475" r="75"/>
+    <rect x="332" y="230" width="50" height="245"/>
+    <path d="M382 230 A150 150 0 0 1 532 380 L482 380 A100 100 0 0 0 382 280 Z"/>
+  </g>
+  <!-- Current lyric line, partly sung -->
+  <rect x="232" y="598" width="560" height="96" rx="48" fill="#FFFFFF" fill-opacity="0.2"/>
+  <path d="M280 598 H584 V694 H280 A48 48 0 0 1 280 598 Z" fill="#FF6F61"/>
+  <!-- Translation line -->
+  <rect x="232" y="738" width="380" height="56" rx="28" fill="#FFFFFF" fill-opacity="0.42"/>
+</svg>

@@ -14,8 +14,6 @@ class MenuBarController: NSObject, NSPopoverDelegate {
     private var scrollResumeTimer: Timer?
     private var lastAutoScrollIndex: Int = -1
 
-    private static let fallbackIcon = "♪ yalyric"
-
     override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
@@ -42,13 +40,8 @@ class MenuBarController: NSObject, NSPopoverDelegate {
     }
 
     private static func applyIcon(to button: NSStatusBarButton) {
-        if let image = NSImage(systemSymbolName: "music.note", accessibilityDescription: "yalyric") {
-            button.image = image
-            button.title = ""
-        } else {
-            button.image = nil
-            button.title = fallbackIcon
-        }
+        button.image = MenuBarGlyph.image()
+        button.title = ""
     }
 
     @objc private func togglePopover() {
