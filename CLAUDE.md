@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 swift build && .build/debug/yalyric     # Build and run
 swift build -c release                   # Release build
 ./scripts/bundle.sh 0.3.0               # Local .app bundle → dist/ (NOT for publishing — see Releasing)
-swift test                               # Run all 140 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
+swift test                               # Run all 213 tests (requires Xcode: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer)
 ```
 
 The app appears as a music note icon in the menu bar. Needs Spotify desktop app running.
@@ -140,7 +140,7 @@ Use `YalyricLog.info()` / `.error()` instead of `print()`. Writes to `~/Library/
 
 ## Testing
 
-Tests are in `Tests/` — 15 files, 140 tests. Key areas:
+Tests are in `Tests/` — 25 files, 213 tests. Key areas:
 - `SyncEngineTests`: timestamp matching, offset, progress calculation
 - `LyricsModelTests`: binary search, lyrics scoring
 - `ThemeTests`: equality, gradient location math
@@ -151,3 +151,4 @@ Tests are in `Tests/` — 15 files, 140 tests. Key areas:
 - `ProviderRegistryTests`: merging a persisted providerOrder with newly shipped providers
 - `OverlayLayoutTests` / `OverlayWindowTests` / `FrameAnimatorTests`: overlay width, truncation, vertical centring, frame resolution, and the window staying centred when a shorter line follows a longer one
 - `OverlayPositionSelectionTests`: choosing a preset clears the dragged position before the theme publishes
+- `LyricPreviewTests`: when the Appearance preview animates vs. stays still, sample-line rotation, karaoke gradient stops, and the stage's zoom-to-fit

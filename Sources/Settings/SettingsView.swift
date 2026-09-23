@@ -117,7 +117,7 @@ struct SettingsContentView: View {
             ShortcutsTab()
                 .tabItem { Label("Shortcuts", systemImage: "keyboard") }
         }
-        .frame(width: 500, height: 500)
+        .frame(width: 520, height: 640)
         .padding(8)
     }
 }
@@ -271,6 +271,19 @@ struct AppearanceTab: View {
     @State private var bgColorSwiftUI: Color = Color(nsColor: NSColor.black.withAlphaComponent(0.5))
 
     var body: some View {
+        VStack(spacing: 0) {
+            // Pinned above the scrolling form: the Karaoke and Animation
+            // controls sit far enough down that a preview inside the form
+            // would be scrolled off exactly when it matters.
+            LyricPreviewPanel(theme: themeManager.theme)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+            appearanceForm
+        }
+    }
+
+    private var appearanceForm: some View {
         Form {
             Section("Theme Presets") {
                 HStack(spacing: 8) {
